@@ -25,7 +25,13 @@ import {
   subscribeToOwnCharacters,
 } from "./characters.js";
 import { createUser, disableUser, subscribeToUsers } from "./admin.js";
-import { requestNotificationPermission, checkCostumeNotifications, clearNotified } from "./notifications.js";
+import {
+  requestNotificationPermission,
+  checkCostumeNotifications,
+  clearNotified,
+  getNotifyRepeatSetting,
+  setNotifyRepeatSetting,
+} from "./notifications.js";
 
 // ---------- Elements ----------
 const loadingView = document.getElementById("loading-view");
@@ -39,6 +45,7 @@ const tabsEl = document.getElementById("tabs");
 const costumesViewEl = document.getElementById("costumes-view");
 const adminViewEl = document.getElementById("admin-view");
 const costumesListEl = document.getElementById("costumes-list");
+const expiryBannerEl = document.getElementById("expiry-banner");
 const usersListEl = document.getElementById("users-list");
 
 const addCostumeBtn = document.getElementById("add-costume-btn");
@@ -78,6 +85,7 @@ const userCancelBtn = document.getElementById("user-cancel");
 
 const notifHint = document.getElementById("notif-hint");
 const enableNotifBtn = document.getElementById("enable-notif-btn");
+const notifyRepeatToggle = document.getElementById("notify-repeat-toggle");
 
 // ---------- State ----------
 let unsubscribeCostumes = null;
@@ -205,6 +213,11 @@ enableNotifBtn.addEventListener("click", () => {
   notifHint.hidden = true;
 });
 
+notifyRepeatToggle.checked = getNotifyRepeatSetting();
+notifyRepeatToggle.addEventListener("change", () => {
+  setNotifyRepeatSetting(notifyRepeatToggle.checked);
+});
+
 setInterval(() => {
   renderCostumes();
   checkCostumeNotifications(latestCostumes, computeRemaining);
@@ -220,6 +233,7 @@ function byRemaining(a, b) {
 }
 
 function renderCostumes() {
+  renderExpiryBanner();
   costumesListEl.innerHTML = "";
 
   if (latestCostumes.length === 0 && latestSections.length === 0 && latestCharacters.length === 0) {
@@ -524,6 +538,37 @@ async function handleSectionDrop(e, containerEl, character) {
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const THREE_DAYS_MS = 3 * ONE_DAY_MS;
+
+function renderExpiryBanner() {
+  let expiredCount = 0;
+  let soonCount = 0;
+
+  for (const costume of latestCostumes) {
+    const remaining = computeRemaining(costume.endAt);
+    if (remaining.expired) {
+      expiredCount++;
+    } else if (remaining.totalMs <= THREE_DAYS_MS) {
+      soonCount++;
+    }
+  }
+
+  if (expiredCount === 0 && soonCount === 0) {
+    expiryBannerEl.hidden = true;
+    expiryBannerEl.innerHTML = "";
+    return;
+  }
+
+  const parts = [];
+  if (expiredCount > 0) {
+    parts.push(`${expiredCount} traje${expiredCount > 1 ? "s" : ""} já expirado${expiredCount > 1 ? "s" : ""}`);
+  }
+  if (soonCount > 0) {
+    parts.push(`${soonCount} traje${soonCount > 1 ? "s" : ""} prestes a expirar (menos de 3 dias)`);
+  }
+
+  expiryBannerEl.hidden = false;
+  expiryBannerEl.innerHTML = `⚠ ${parts.join(" · ")}.`;
+}
 
 function buildCostumeCard(costume) {
   const remaining = computeRemaining(costume.endAt);

@@ -15,7 +15,7 @@
 
   <div id="login-view" class="centered-view" hidden>
     <form id="login-form" class="card">
-      <h1>Metin2 Costumes Tracker</h1>
+      <h1><img src="assets/icons/favicon.png" alt="" class="title-icon" />Metin2 Costumes Tracker</h1>
       <label>Email
         <input type="email" id="login-email" required autocomplete="username" />
       </label>
@@ -29,12 +29,16 @@
 
   <div id="app-view" hidden>
     <header>
-      <h1>Metin2 Costumes Tracker</h1>
+      <h1><img src="assets/icons/favicon.png" alt="" class="title-icon" />Metin2 Costumes Tracker</h1>
       <div class="header-actions">
         <div class="tabs" id="tabs" hidden>
           <button data-tab="costumes-view" class="tab-btn active">Trajes</button>
           <button data-tab="admin-view" class="tab-btn">Administração</button>
         </div>
+        <label class="checkbox-label notify-toggle">
+          <input type="checkbox" id="notify-repeat-toggle" class="toggle-switch" checked />
+          Avisos a cada hora
+        </label>
         <span id="user-email" class="user-email"></span>
         <button id="logout-btn" class="secondary">Sair</button>
       </div>
@@ -42,6 +46,7 @@
 
     <main>
       <section id="costumes-view" class="view">
+        <div id="expiry-banner" class="alert-banner" hidden></div>
         <div class="section-header">
           <h2>Os meus trajes</h2>
           <div class="section-header-actions">
