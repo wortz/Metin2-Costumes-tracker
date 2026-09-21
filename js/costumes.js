@@ -9,7 +9,6 @@ import {
   onSnapshot,
   Timestamp,
   serverTimestamp,
-  writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { db } from "./firebase-init.js";
 
@@ -37,7 +36,6 @@ export function addCostume({ ownerUid, character, type, description, daysLeft, h
     endAt: Timestamp.fromDate(endAt),
     notifyDaysBefore: Number(notifyDaysBefore) || 0,
     sectionId: sectionId || null,
-    order: Date.now(),
     createdAt: serverTimestamp(),
   });
 }
@@ -46,22 +44,13 @@ export function deleteCostume(costumeId) {
   return deleteDoc(doc(db, "costumes", costumeId));
 }
 
-// Move um traje para outra personagem/secção e/ou muda a sua posição (drag-and-drop).
-export function moveCostume(costumeId, { character, sectionId, order }) {
+// Move um traje para outra personagem/secção (drag-and-drop). A ordem dentro da
+// secção é sempre pelo tempo restante, por isso não há posição manual a guardar.
+export function moveCostume(costumeId, { character, sectionId }) {
   return updateDoc(doc(db, "costumes", costumeId), {
     character,
     sectionId: sectionId || null,
-    order,
   });
-}
-
-// Aplica uma nova ordem a vários trajes de uma vez (reordenar dentro da mesma lista).
-export function reorderCostumes(updates) {
-  const batch = writeBatch(db);
-  for (const { id, order } of updates) {
-    batch.update(doc(db, "costumes", id), { order });
-  }
-  return batch.commit();
 }
 
 // Renova o traje: define um novo tempo restante a partir de agora.

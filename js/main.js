@@ -6,7 +6,6 @@ import {
   deleteCostume,
   renewCostume,
   moveCostume,
-  reorderCostumes,
   subscribeToOwnCostumes,
   subscribeToAllCostumes,
   computeRemaining,
@@ -18,6 +17,7 @@ import {
   deleteSection,
   subscribeToOwnSections,
   reorderSections,
+  ensureDefaultSection,
 } from "./sections.js";
 import {
   addCharacter,
@@ -213,6 +213,10 @@ function byOrder(a, b) {
   return (a.order ?? 0) - (b.order ?? 0);
 }
 
+function byRemaining(a, b) {
+  return computeRemaining(a.endAt).totalMs - computeRemaining(b.endAt).totalMs;
+}
+
 function renderCostumes() {
   costumesListEl.innerHTML = "";
 
@@ -272,8 +276,9 @@ function buildCharacterGroup(character) {
   groupEl.appendChild(header);
 
   const sections = latestSections.filter((s) => s.character === character).sort(byOrder);
-  const defaultSection = sections.find((s) => s.isDefault);
-  ensureDefaultSection(character, defaultSection);
+  const defaultSections = sections.filter((s) => s.isDefault);
+  const defaultSection = defaultSections[0];
+  ensureCharacterDefaultSection(character, defaultSections);
 
   const sectionsContainer = document.createElement("div");
   sectionsContainer.className = "sections-container";
@@ -294,8 +299,11 @@ function buildCharacterGroup(character) {
     handleSectionDrop(e, sectionsContainer, character);
   });
 
-  for (const section of sections) {
-    const costumes = latestCostumes.filter((c) => c.character === character && c.sectionId === section.id).sort(byOrder);
+  const extraDefaultIds = new Set(defaultSections.slice(1).map((s) => s.id));
+  const sectionsToRender = sections.filter((s) => !extraDefaultIds.has(s.id));
+
+  for (const section of sectionsToRender) {
+    const costumes = latestCostumes.filter((c) => c.character === character && c.sectionId === section.id).sort(byRemaining);
     sectionsContainer.appendChild(buildSectionBlock(section, costumes, character, defaultSection));
   }
 
@@ -303,7 +311,7 @@ function buildCharacterGroup(character) {
     migrateOrphanedCostumes(character, defaultSection);
   } else {
     // Enquanto a secção "Geral" ainda não foi criada no Firestore, mostra os trajes sem secção na mesma.
-    const orphaned = latestCostumes.filter((c) => c.character === character && !c.sectionId).sort(byOrder);
+    const orphaned = latestCostumes.filter((c) => c.character === character && !c.sectionId).sort(byRemaining);
     if (orphaned.length) {
       sectionsContainer.appendChild(buildSectionBlock(null, orphaned, character, null));
     }
@@ -316,11 +324,21 @@ function buildCharacterGroup(character) {
 
 const pendingDefaultSections = new Set();
 const pendingMigrations = new Set();
+const pendingDedup = new Set();
 
-function ensureDefaultSection(character, defaultSection) {
-  if (defaultSection || pendingDefaultSections.has(character)) return;
+function ensureCharacterDefaultSection(character, defaultSections) {
+  if (defaultSections.length > 1 && !pendingDedup.has(character)) {
+    // Limpa duplicados criados por uma condição de corrida anterior: mantém o mais antigo,
+    // move os trajes dos outros para lá, e apaga-os.
+    pendingDedup.add(character);
+    const [keep, ...extras] = defaultSections;
+    Promise.all(extras.map((extra) => deleteSection(extra.id, keep.id))).finally(() => pendingDedup.delete(character));
+    return;
+  }
+
+  if (defaultSections.length > 0 || pendingDefaultSections.has(character)) return;
   pendingDefaultSections.add(character);
-  addSection({ ownerUid: currentUser.uid, character, name: "Geral", isDefault: true, order: 0 }).finally(() => {
+  ensureDefaultSection({ ownerUid: currentUser.uid, character }).finally(() => {
     pendingDefaultSections.delete(character);
   });
 }
@@ -332,8 +350,8 @@ function migrateOrphanedCostumes(character, defaultSection) {
   const key = character;
   if (orphaned.length === 0 || pendingMigrations.has(key)) return;
   pendingMigrations.add(key);
-  Promise.all(orphaned.map((c) => moveCostume(c.id, { character, sectionId: defaultSection.id, order: c.order ?? Date.now() }))).finally(
-    () => pendingMigrations.delete(key)
+  Promise.all(orphaned.map((c) => moveCostume(c.id, { character, sectionId: defaultSection.id }))).finally(() =>
+    pendingMigrations.delete(key)
   );
 }
 
@@ -389,7 +407,6 @@ function buildSectionBlock(section, costumes, character, defaultSection) {
     if (!e.dataTransfer.types.includes("application/x-costume-id")) return;
     e.preventDefault();
     dropzone.classList.add("dropzone-active");
-    showInsertionMarker(dropzone, e.clientY, ".costume-card");
   });
   dropzone.addEventListener("dragleave", (e) => {
     if (dropzone.contains(e.relatedTarget)) return;
@@ -465,22 +482,12 @@ async function handleCostumeDrop(e, dropzoneEl) {
   const targetCharacter = dropzoneEl.dataset.character;
   const targetSectionId = dropzoneEl.dataset.sectionId || null;
 
-  const afterEl = getDragAfterElement(dropzoneEl, e.clientY, ".costume-card");
-  const existingIds = [...dropzoneEl.querySelectorAll(".costume-card")]
-    .map((el) => el.dataset.costumeId)
-    .filter((id) => id !== costumeId);
-
-  let insertIndex = existingIds.length;
-  if (afterEl) {
-    const idx = existingIds.indexOf(afterEl.dataset.costumeId);
-    if (idx !== -1) insertIndex = idx;
+  if (draggedCostume.character === targetCharacter && (draggedCostume.sectionId || null) === targetSectionId) {
+    return;
   }
-  existingIds.splice(insertIndex, 0, costumeId);
 
   try {
-    await moveCostume(costumeId, { character: targetCharacter, sectionId: targetSectionId, order: insertIndex });
-    const others = existingIds.map((id, index) => ({ id, order: index })).filter((u) => u.id !== costumeId);
-    if (others.length) await reorderCostumes(others);
+    await moveCostume(costumeId, { character: targetCharacter, sectionId: targetSectionId });
     clearNotified(costumeId);
   } catch (err) {
     alert(err.message || "Erro ao mover o traje.");
