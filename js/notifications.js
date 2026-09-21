@@ -1,3 +1,5 @@
+import { getNotifyThresholdDays } from "./settings.js";
+
 const NOTIFIED_KEY = "metin2-costumes-notified-hours";
 const REPEAT_SETTING_KEY = "metin2-costumes-notify-repeat";
 
@@ -10,8 +12,6 @@ export function getNotifyRepeatSetting() {
 export function setNotifyRepeatSetting(value) {
   localStorage.setItem(REPEAT_SETTING_KEY, value ? "true" : "false");
 }
-
-const NOTIFY_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 // Guarda, por traje, a última "hora restante" em que já se notificou.
 function getNotifiedState() {
@@ -52,9 +52,11 @@ export function checkCostumeNotifications(costumes, computeRemaining) {
   const repeatHourly = getNotifyRepeatSetting();
   let changed = false;
 
+  const thresholdMs = getNotifyThresholdDays() * 24 * 60 * 60 * 1000;
+
   for (const costume of costumes) {
     const remaining = computeRemaining(costume.endAt);
-    const withinWindow = !remaining.expired && remaining.totalMs <= NOTIFY_THRESHOLD_MS;
+    const withinWindow = !remaining.expired && remaining.totalMs <= thresholdMs;
 
     if (!withinWindow) {
       if (costume.id in state) {

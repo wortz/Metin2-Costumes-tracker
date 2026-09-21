@@ -32,6 +32,14 @@ import {
   getNotifyRepeatSetting,
   setNotifyRepeatSetting,
 } from "./notifications.js";
+import {
+  getNotifyThresholdDays,
+  setNotifyThresholdDays,
+  getWarningThresholdDays,
+  setWarningThresholdDays,
+  getAlertThresholdDays,
+  setAlertThresholdDays,
+} from "./settings.js";
 
 // ---------- Elements ----------
 const loadingView = document.getElementById("loading-view");
@@ -86,7 +94,16 @@ const userCancelBtn = document.getElementById("user-cancel");
 
 const notifHint = document.getElementById("notif-hint");
 const enableNotifBtn = document.getElementById("enable-notif-btn");
-const notifyRepeatToggle = document.getElementById("notify-repeat-toggle");
+
+const openSettingsBtn = document.getElementById("open-settings-btn");
+const settingsModal = document.getElementById("settings-modal");
+const settingsForm = document.getElementById("settings-form");
+const settingsFormError = document.getElementById("settings-form-error");
+const settingsCancelBtn = document.getElementById("settings-cancel");
+const settingsNotifyRepeat = document.getElementById("settings-notify-repeat");
+const settingsNotifyDays = document.getElementById("settings-notify-days");
+const settingsWarningDays = document.getElementById("settings-warning-days");
+const settingsAlertDays = document.getElementById("settings-alert-days");
 
 // ---------- State ----------
 let unsubscribeCostumes = null;
@@ -214,9 +231,35 @@ enableNotifBtn.addEventListener("click", () => {
   notifHint.hidden = true;
 });
 
-notifyRepeatToggle.checked = getNotifyRepeatSetting();
-notifyRepeatToggle.addEventListener("change", () => {
-  setNotifyRepeatSetting(notifyRepeatToggle.checked);
+// ---------- Settings modal ----------
+openSettingsBtn.addEventListener("click", () => {
+  settingsFormError.textContent = "";
+  settingsNotifyRepeat.checked = getNotifyRepeatSetting();
+  settingsNotifyDays.value = getNotifyThresholdDays();
+  settingsWarningDays.value = getWarningThresholdDays();
+  settingsAlertDays.value = getAlertThresholdDays();
+  settingsModal.showModal();
+});
+
+settingsCancelBtn.addEventListener("click", () => settingsModal.close());
+
+settingsForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const notifyDays = Number(settingsNotifyDays.value);
+  const warningDays = Number(settingsWarningDays.value);
+  const alertDays = Number(settingsAlertDays.value);
+
+  if (!(notifyDays > 0) || !(warningDays > 0) || !(alertDays > 0)) {
+    settingsFormError.textContent = "Os valores têm de ser maiores que zero.";
+    return;
+  }
+
+  setNotifyRepeatSetting(settingsNotifyRepeat.checked);
+  setNotifyThresholdDays(notifyDays);
+  setWarningThresholdDays(warningDays);
+  setAlertThresholdDays(alertDays);
+  settingsModal.close();
+  renderCostumes();
 });
 
 setInterval(() => {
@@ -538,9 +581,13 @@ async function handleSectionDrop(e, containerEl, character) {
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const THREE_DAYS_MS = 3 * ONE_DAY_MS;
 
 function renderExpiryBanner() {
+  const warningMs = getWarningThresholdDays() * ONE_DAY_MS;
+  const alertMs = getAlertThresholdDays() * ONE_DAY_MS;
+  const alertDays = getAlertThresholdDays();
+  const warningDays = getWarningThresholdDays();
+
   let expiredCount = 0;
   let soonCount = 0;
   let urgentCount = 0;
@@ -550,14 +597,14 @@ function renderExpiryBanner() {
     if (remaining.expired) {
       expiredCount++;
     } else {
-      if (remaining.totalMs <= THREE_DAYS_MS) soonCount++;
-      if (remaining.totalMs <= ONE_DAY_MS) urgentCount++;
+      if (remaining.totalMs <= warningMs) soonCount++;
+      if (remaining.totalMs <= alertMs) urgentCount++;
     }
   }
 
   if (urgentCount > 0) {
     urgentBannerEl.hidden = false;
-    urgentBannerEl.innerHTML = `🔴 ${urgentCount} traje${urgentCount > 1 ? "s" : ""} com menos de 1 dia para expirar!`;
+    urgentBannerEl.innerHTML = `🔴 ${urgentCount} traje${urgentCount > 1 ? "s" : ""} com menos de ${alertDays} dia${alertDays > 1 ? "s" : ""} para expirar!`;
   } else {
     urgentBannerEl.hidden = true;
     urgentBannerEl.innerHTML = "";
@@ -574,7 +621,7 @@ function renderExpiryBanner() {
     parts.push(`${expiredCount} traje${expiredCount > 1 ? "s" : ""} já expirado${expiredCount > 1 ? "s" : ""}`);
   }
   if (soonCount > 0) {
-    parts.push(`${soonCount} traje${soonCount > 1 ? "s" : ""} prestes a expirar (menos de 3 dias)`);
+    parts.push(`${soonCount} traje${soonCount > 1 ? "s" : ""} prestes a expirar (menos de ${warningDays} dias)`);
   }
 
   expiryBannerEl.hidden = false;
@@ -583,8 +630,8 @@ function renderExpiryBanner() {
 
 function buildCostumeCard(costume) {
   const remaining = computeRemaining(costume.endAt);
-  const isDanger = !remaining.expired && remaining.totalMs <= ONE_DAY_MS;
-  const isWarning = !remaining.expired && !isDanger && remaining.totalMs <= THREE_DAYS_MS;
+  const isDanger = !remaining.expired && remaining.totalMs <= getAlertThresholdDays() * ONE_DAY_MS;
+  const isWarning = !remaining.expired && !isDanger && remaining.totalMs <= getWarningThresholdDays() * ONE_DAY_MS;
 
   const card = document.createElement("div");
   card.className =

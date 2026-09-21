@@ -158,10 +158,6 @@ button.danger:hover {
   margin-bottom: 16px;
 }
 
-.notify-settings-bar {
-  margin-bottom: 20px;
-}
-
 .alert-banner-danger {
   background: rgba(255, 92, 92, 0.12);
   border-color: var(--danger);

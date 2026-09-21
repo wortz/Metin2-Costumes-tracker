@@ -35,6 +35,7 @@
           <button data-tab="costumes-view" class="tab-btn active">Trajes</button>
           <button data-tab="admin-view" class="tab-btn">Administração</button>
         </div>
+        <button id="open-settings-btn" class="secondary">⚙ Configurações</button>
         <span id="user-email" class="user-email"></span>
         <button id="logout-btn" class="secondary">Sair</button>
       </div>
@@ -50,12 +51,6 @@
             <button id="add-character-btn" class="secondary">+ Personagem</button>
             <button id="add-costume-btn">+ Adicionar traje</button>
           </div>
-        </div>
-        <div class="hint notify-settings-bar">
-          <label class="checkbox-label notify-toggle">
-            <input type="checkbox" id="notify-repeat-toggle" class="toggle-switch" />
-            Repetir avisos a cada hora (em vez de avisar só uma vez)
-          </label>
         </div>
         <p id="notif-hint" class="hint" hidden>
           Ativa as notificações do browser para seres avisado quando um traje estiver perto de expirar.
@@ -187,6 +182,30 @@
       <div class="modal-actions">
         <button type="button" id="section-cancel" class="secondary">Cancelar</button>
         <button type="submit">Criar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settings-modal">
+    <form id="settings-form" class="card">
+      <h2>Configurações</h2>
+      <label class="checkbox-label">
+        <input type="checkbox" id="settings-notify-repeat" class="toggle-switch" />
+        Repetir avisos a cada hora (em vez de avisar só uma vez)
+      </label>
+      <label>Avisar no browser a a partir de (dias)
+        <input type="number" id="settings-notify-days" min="1" step="1" />
+      </label>
+      <label>Aviso (topo da página) a partir de (dias)
+        <input type="number" id="settings-warning-days" min="1" step="1" />
+      </label>
+      <label>Alerta (topo da página) a partir de (dias)
+        <input type="number" id="settings-alert-days" min="1" step="1" />
+      </label>
+      <p id="settings-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="settings-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Guardar</button>
       </div>
     </form>
   </dialog>
