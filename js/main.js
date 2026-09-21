@@ -28,6 +28,7 @@ import { createUser, disableUser, subscribeToUsers } from "./admin.js";
 import { requestNotificationPermission, checkCostumeNotifications, clearNotified } from "./notifications.js";
 
 // ---------- Elements ----------
+const loadingView = document.getElementById("loading-view");
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
 const loginForm = document.getElementById("login-form");
@@ -109,6 +110,7 @@ logoutBtn.addEventListener("click", () => logout());
 
 onAuthChange((user, err) => {
   cleanupSubscriptions();
+  loadingView.hidden = true;
 
   if (!user) {
     appView.hidden = true;
