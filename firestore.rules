@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userDoc().role == 'admin';
+    }
+
+    function isActive() {
+      return isSignedIn() && userDoc().disabled != true;
+    }
+
+    match /users/{userId} {
+      // Qualquer utilizador autenticado pode ler o seu próprio perfil (para
+      // verificar se está desativado); o admin pode ler todos.
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Só o admin pode criar/editar perfis (criação de utilizadores, desativação).
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /costumes/{costumeId} {
+      allow read: if isActive() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isActive() && resource.data.ownerUid == request.auth.uid;
+    }
+  }
+}

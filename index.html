@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Metin2 Costumes Tracker</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <div id="login-view" class="centered-view">
+    <form id="login-form" class="card">
+      <h1>Metin2 Costumes Tracker</h1>
+      <label>Email
+        <input type="email" id="login-email" required autocomplete="username" />
+      </label>
+      <label>Password
+        <input type="password" id="login-password" required autocomplete="current-password" />
+      </label>
+      <button type="submit">Entrar</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+
+  <div id="app-view" hidden>
+    <header>
+      <h1>Metin2 Costumes Tracker</h1>
+      <div class="header-actions">
+        <div class="tabs" id="tabs" hidden>
+          <button data-tab="costumes-view" class="tab-btn active">Trajes</button>
+          <button data-tab="admin-view" class="tab-btn">Administração</button>
+        </div>
+        <span id="user-email" class="user-email"></span>
+        <button id="logout-btn" class="secondary">Sair</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="costumes-view" class="view">
+        <div class="section-header">
+          <h2>Os meus trajes</h2>
+          <button id="add-costume-btn">+ Adicionar traje</button>
+        </div>
+        <p id="notif-hint" class="hint" hidden>
+          Ativa as notificações do browser para seres avisado quando um traje estiver perto de expirar.
+          <button id="enable-notif-btn" type="button">Ativar notificações</button>
+        </p>
+        <div id="costumes-list" class="costumes-list"></div>
+      </section>
+
+      <section id="admin-view" class="view" hidden>
+        <div class="section-header">
+          <h2>Administração de utilizadores</h2>
+          <button id="add-user-btn">+ Criar utilizador</button>
+        </div>
+        <div id="users-list" class="users-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="costume-modal">
+    <form id="costume-form" class="card">
+      <h2>Adicionar traje</h2>
+      <label>Personagem
+        <input id="costume-character" required placeholder="Nome da personagem" />
+      </label>
+      <div class="field-label">Tipo</div>
+      <div class="type-picker" id="costume-type-picker">
+        <button type="button" class="type-option selected" data-type="body">
+          <img src="assets/icons/body.png" alt="Corpo" />
+          <span>Corpo</span>
+        </button>
+        <button type="button" class="type-option" data-type="weapon">
+          <img src="assets/icons/weapon.png" alt="Arma" />
+          <span>Arma</span>
+        </button>
+        <button type="button" class="type-option" data-type="head">
+          <img src="assets/icons/head.png" alt="Cabeça" />
+          <span>Cabeça</span>
+        </button>
+      </div>
+      <input type="hidden" id="costume-type" value="body" />
+      <label>Descrição
+        <textarea id="costume-description" rows="2" placeholder="Ex: Traje de Verão +9"></textarea>
+      </label>
+      <fieldset>
+        <legend>Tempo restante</legend>
+        <div class="time-inputs">
+          <label>Dias <input type="number" id="costume-days" min="0" value="0" /></label>
+          <label>Horas <input type="number" id="costume-hours" min="0" max="23" value="0" /></label>
+          <label>Minutos <input type="number" id="costume-minutes" min="0" max="59" value="0" /></label>
+        </div>
+      </fieldset>
+      <label>Notificar quando faltarem (dias)
+        <input type="number" id="costume-notify-days" min="0" value="1" />
+      </label>
+      <p id="costume-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="costume-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="user-modal">
+    <form id="user-form" class="card">
+      <h2>Criar utilizador</h2>
+      <label>Nome
+        <input id="user-displayname" placeholder="Opcional" />
+      </label>
+      <label>Email
+        <input type="email" id="user-email-input" required />
+      </label>
+      <label>Password
+        <input type="password" id="user-password" required minlength="6" />
+      </label>
+      <p id="user-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="user-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Criar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
