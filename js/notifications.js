@@ -12,6 +12,13 @@ function saveNotifiedSet(set) {
   localStorage.setItem(NOTIFIED_KEY, JSON.stringify([...set]));
 }
 
+// Remove um traje da lista de "já notificados" (usado ao renovar, para que
+// volte a notificar quando entrar de novo na janela de aviso).
+export function clearNotified(costumeId) {
+  const notified = getNotifiedSet();
+  if (notified.delete(costumeId)) saveNotifiedSet(notified);
+}
+
 export function requestNotificationPermission() {
   if (!("Notification" in window)) return;
   if (Notification.permission === "default") {

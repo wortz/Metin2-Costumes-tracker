@@ -39,7 +39,10 @@
       <section id="costumes-view" class="view">
         <div class="section-header">
           <h2>Os meus trajes</h2>
-          <button id="add-costume-btn">+ Adicionar traje</button>
+          <div class="section-header-actions">
+            <button id="add-character-btn" class="secondary">+ Personagem</button>
+            <button id="add-costume-btn">+ Adicionar traje</button>
+          </div>
         </div>
         <p id="notif-hint" class="hint" hidden>
           Ativa as notificações do browser para seres avisado quando um traje estiver perto de expirar.
@@ -81,7 +84,7 @@
       </div>
       <input type="hidden" id="costume-type" value="body" />
       <label>Descrição
-        <textarea id="costume-description" rows="2" placeholder="Ex: Traje de Verão +9"></textarea>
+        <textarea id="costume-description" rows="2" placeholder="Ex: Trate set relampagos."></textarea>
       </label>
       <fieldset>
         <legend>Tempo restante</legend>
@@ -117,6 +120,62 @@
       <p id="user-form-error" class="error"></p>
       <div class="modal-actions">
         <button type="button" id="user-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Criar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="renew-modal">
+    <form id="renew-form" class="card">
+      <h2>Renovar traje</h2>
+      <div class="hint">
+        <img id="renew-costume-icon" class="type-icon" src="" alt="" />
+        <div>
+          <div id="renew-costume-name" class="renew-name"></div>
+          <div id="renew-costume-type"></div>
+          <div id="renew-costume-desc" class="costume-desc"></div>
+        </div>
+      </div>
+      <fieldset>
+        <legend>Novo tempo restante</legend>
+        <div class="time-inputs">
+          <label>Dias <input type="number" id="renew-days" min="0" value="0" /></label>
+          <label>Horas <input type="number" id="renew-hours" min="0" max="23" value="0" /></label>
+          <label>Minutos <input type="number" id="renew-minutes" min="0" max="59" value="0" /></label>
+        </div>
+      </fieldset>
+      <p id="renew-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="renew-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Renovar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="character-modal">
+    <form id="character-form" class="card">
+      <h2>Nova personagem</h2>
+      <label>Nome da personagem
+        <input id="character-name" required placeholder="Nome da personagem" />
+      </label>
+      <p id="character-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="character-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Criar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="section-modal">
+    <form id="section-form" class="card">
+      <h2>Nova secção</h2>
+      <p id="section-character-label" class="hint"></p>
+      <label>Nome da secção
+        <input id="section-name" required placeholder="Ex: PVP, Eventos, Farm..." />
+      </label>
+      <p id="section-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="section-cancel" class="secondary">Cancelar</button>
         <button type="submit">Criar</button>
       </div>
     </form>

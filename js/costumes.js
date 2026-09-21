@@ -2,12 +2,14 @@ import {
   collection,
   addDoc,
   deleteDoc,
+  updateDoc,
   doc,
   query,
   where,
   onSnapshot,
   Timestamp,
   serverTimestamp,
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { db } from "./firebase-init.js";
 
@@ -24,7 +26,7 @@ export const COSTUME_ICONS = {
 };
 
 // Cria o traje. daysLeft/hoursLeft/minutesLeft definem quanto tempo falta A PARTIR DE AGORA.
-export function addCostume({ ownerUid, character, type, description, daysLeft, hoursLeft, minutesLeft, notifyDaysBefore }) {
+export function addCostume({ ownerUid, character, type, description, daysLeft, hoursLeft, minutesLeft, notifyDaysBefore, sectionId = null }) {
   const totalMinutes = (Number(daysLeft) || 0) * 24 * 60 + (Number(hoursLeft) || 0) * 60 + (Number(minutesLeft) || 0);
   const endAt = new Date(Date.now() + totalMinutes * 60 * 1000);
   return addDoc(collection(db, "costumes"), {
@@ -34,12 +36,41 @@ export function addCostume({ ownerUid, character, type, description, daysLeft, h
     description: description.trim(),
     endAt: Timestamp.fromDate(endAt),
     notifyDaysBefore: Number(notifyDaysBefore) || 0,
+    sectionId: sectionId || null,
+    order: Date.now(),
     createdAt: serverTimestamp(),
   });
 }
 
 export function deleteCostume(costumeId) {
   return deleteDoc(doc(db, "costumes", costumeId));
+}
+
+// Move um traje para outra personagem/secção e/ou muda a sua posição (drag-and-drop).
+export function moveCostume(costumeId, { character, sectionId, order }) {
+  return updateDoc(doc(db, "costumes", costumeId), {
+    character,
+    sectionId: sectionId || null,
+    order,
+  });
+}
+
+// Aplica uma nova ordem a vários trajes de uma vez (reordenar dentro da mesma lista).
+export function reorderCostumes(updates) {
+  const batch = writeBatch(db);
+  for (const { id, order } of updates) {
+    batch.update(doc(db, "costumes", id), { order });
+  }
+  return batch.commit();
+}
+
+// Renova o traje: define um novo tempo restante a partir de agora.
+export function renewCostume(costumeId, { daysLeft, hoursLeft, minutesLeft }) {
+  const totalMinutes = (Number(daysLeft) || 0) * 24 * 60 + (Number(hoursLeft) || 0) * 60 + (Number(minutesLeft) || 0);
+  const endAt = new Date(Date.now() + totalMinutes * 60 * 1000);
+  return updateDoc(doc(db, "costumes", costumeId), {
+    endAt: Timestamp.fromDate(endAt),
+  });
 }
 
 // Subscreve em tempo real aos trajes de um utilizador. Devolve a função unsubscribe.

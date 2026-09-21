@@ -32,5 +32,17 @@ service cloud.firestore {
       allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isActive() && resource.data.ownerUid == request.auth.uid;
     }
+
+    match /sections/{sectionId} {
+      allow read: if isActive() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isActive() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /characters/{characterId} {
+      allow read: if isActive() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isActive() && resource.data.ownerUid == request.auth.uid;
+    }
   }
 }

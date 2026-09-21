@@ -198,14 +198,111 @@ main {
   margin-bottom: 24px;
 }
 
-.character-group h3 {
+.character-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.character-header h3 {
   font-size: 15px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin: 0 0 10px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 6px;
+  margin: 0;
+}
+
+button.small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.section-block {
+  margin-bottom: 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+
+.section-block.dragging {
+  opacity: 0.4;
+}
+
+.section-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+  cursor: grab;
+}
+
+.section-block-header.muted {
+  color: var(--text-muted);
+  cursor: default;
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.drag-handle {
+  color: var(--text-muted);
+  cursor: grab;
+}
+
+.section-block-header .icon-btn.small {
+  margin-left: auto;
+  padding: 2px 8px;
+  line-height: 1;
+}
+
+.section-dropzone {
+  min-height: 20px;
+  border-radius: var(--radius);
+  transition: background 0.15s, outline 0.15s;
+}
+
+.section-dropzone.dropzone-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  background: rgba(124, 92, 255, 0.06);
+}
+
+.insertion-marker {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  margin: 2px 0;
+  box-shadow: 0 0 6px 0 var(--accent);
+}
+
+.sections-container.dropzone-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--radius);
+  background: rgba(124, 92, 255, 0.06);
+}
+
+.empty-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  padding: 8px 4px;
+  margin: 0;
 }
 
 .costume-card {
@@ -218,6 +315,7 @@ main {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
+  cursor: grab;
 }
 
 .costume-card.warning {
@@ -231,6 +329,10 @@ main {
 .costume-card.expired {
   border-color: var(--danger);
   opacity: 0.75;
+}
+
+.costume-card.dragging {
+  opacity: 0.4;
 }
 
 .costume-main {
@@ -358,6 +460,7 @@ dialog {
   border-radius: var(--radius);
   padding: 0;
   background: transparent;
+  color: var(--text);
   width: 100%;
   max-width: 380px;
 }
@@ -376,6 +479,13 @@ fieldset legend {
   color: var(--text-muted);
   font-size: 13px;
   padding: 0 6px;
+}
+
+.renew-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
 }
 
 .field-label {
