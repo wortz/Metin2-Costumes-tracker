@@ -4,12 +4,14 @@ const REPEAT_SETTING_KEY = "metin2-costumes-notify-repeat";
 // Preferência global do utilizador: avisar a cada hora (true) ou só uma vez (false).
 export function getNotifyRepeatSetting() {
   const value = localStorage.getItem(REPEAT_SETTING_KEY);
-  return value === null ? true : value === "true";
+  return value === "true";
 }
 
 export function setNotifyRepeatSetting(value) {
   localStorage.setItem(REPEAT_SETTING_KEY, value ? "true" : "false");
 }
+
+const NOTIFY_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 // Guarda, por traje, a última "hora restante" em que já se notificou.
 function getNotifiedState() {
@@ -41,9 +43,9 @@ export function requestNotificationPermission() {
   }
 }
 
-// Verifica a lista de trajes e dispara uma notificação sempre que o tempo restante
-// (dentro da janela definida por notifyDaysBefore) descer para uma nova hora cheia,
-// ex: notifyDaysBefore=1 avisa às 24h, 23h, 22h... restantes, até ser renovado ou expirar.
+// Verifica a lista de trajes e dispara uma notificação quando faltar menos de 1 dia,
+// repetindo a cada hora cheia (24h, 23h, 22h...) se a preferência de repetição
+// estiver ligada, até ser renovado ou expirar.
 export function checkCostumeNotifications(costumes, computeRemaining) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const state = getNotifiedState();
@@ -52,8 +54,7 @@ export function checkCostumeNotifications(costumes, computeRemaining) {
 
   for (const costume of costumes) {
     const remaining = computeRemaining(costume.endAt);
-    const thresholdMs = (costume.notifyDaysBefore || 0) * 24 * 60 * 60 * 1000;
-    const withinWindow = !remaining.expired && thresholdMs > 0 && remaining.totalMs <= thresholdMs;
+    const withinWindow = !remaining.expired && remaining.totalMs <= NOTIFY_THRESHOLD_MS;
 
     if (!withinWindow) {
       if (costume.id in state) {

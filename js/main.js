@@ -46,6 +46,7 @@ const costumesViewEl = document.getElementById("costumes-view");
 const adminViewEl = document.getElementById("admin-view");
 const costumesListEl = document.getElementById("costumes-list");
 const expiryBannerEl = document.getElementById("expiry-banner");
+const urgentBannerEl = document.getElementById("urgent-banner");
 const usersListEl = document.getElementById("users-list");
 
 const addCostumeBtn = document.getElementById("add-costume-btn");
@@ -542,14 +543,24 @@ const THREE_DAYS_MS = 3 * ONE_DAY_MS;
 function renderExpiryBanner() {
   let expiredCount = 0;
   let soonCount = 0;
+  let urgentCount = 0;
 
   for (const costume of latestCostumes) {
     const remaining = computeRemaining(costume.endAt);
     if (remaining.expired) {
       expiredCount++;
-    } else if (remaining.totalMs <= THREE_DAYS_MS) {
-      soonCount++;
+    } else {
+      if (remaining.totalMs <= THREE_DAYS_MS) soonCount++;
+      if (remaining.totalMs <= ONE_DAY_MS) urgentCount++;
     }
+  }
+
+  if (urgentCount > 0) {
+    urgentBannerEl.hidden = false;
+    urgentBannerEl.innerHTML = `🔴 ${urgentCount} traje${urgentCount > 1 ? "s" : ""} com menos de 1 dia para expirar!`;
+  } else {
+    urgentBannerEl.hidden = true;
+    urgentBannerEl.innerHTML = "";
   }
 
   if (expiredCount === 0 && soonCount === 0) {
@@ -677,7 +688,6 @@ costumeForm.addEventListener("submit", async (e) => {
   const daysLeft = document.getElementById("costume-days").value;
   const hoursLeft = document.getElementById("costume-hours").value;
   const minutesLeft = document.getElementById("costume-minutes").value;
-  const notifyDaysBefore = document.getElementById("costume-notify-days").value;
 
   if (!character) {
     costumeFormError.textContent = "Indica o nome da personagem.";
@@ -698,7 +708,6 @@ costumeForm.addEventListener("submit", async (e) => {
       daysLeft,
       hoursLeft,
       minutesLeft,
-      notifyDaysBefore,
     });
     costumeModal.close();
   } catch (err) {

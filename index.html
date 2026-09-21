@@ -35,10 +35,6 @@
           <button data-tab="costumes-view" class="tab-btn active">Trajes</button>
           <button data-tab="admin-view" class="tab-btn">Administração</button>
         </div>
-        <label class="checkbox-label notify-toggle">
-          <input type="checkbox" id="notify-repeat-toggle" class="toggle-switch" checked />
-          Avisos a cada hora
-        </label>
         <span id="user-email" class="user-email"></span>
         <button id="logout-btn" class="secondary">Sair</button>
       </div>
@@ -46,6 +42,7 @@
 
     <main>
       <section id="costumes-view" class="view">
+        <div id="urgent-banner" class="alert-banner alert-banner-danger" hidden></div>
         <div id="expiry-banner" class="alert-banner" hidden></div>
         <div class="section-header">
           <h2>Os meus trajes</h2>
@@ -53,6 +50,12 @@
             <button id="add-character-btn" class="secondary">+ Personagem</button>
             <button id="add-costume-btn">+ Adicionar traje</button>
           </div>
+        </div>
+        <div class="hint notify-settings-bar">
+          <label class="checkbox-label notify-toggle">
+            <input type="checkbox" id="notify-repeat-toggle" class="toggle-switch" />
+            Repetir avisos a cada hora (em vez de avisar só uma vez)
+          </label>
         </div>
         <p id="notif-hint" class="hint" hidden>
           Ativa as notificações do browser para seres avisado quando um traje estiver perto de expirar.
@@ -104,9 +107,6 @@
           <label>Minutos <input type="number" id="costume-minutes" min="0" max="59" value="0" /></label>
         </div>
       </fieldset>
-      <label>Notificar quando faltarem (dias)
-        <input type="number" id="costume-notify-days" min="0" value="1" />
-      </label>
       <p id="costume-form-error" class="error"></p>
       <div class="modal-actions">
         <button type="button" id="costume-cancel" class="secondary">Cancelar</button>

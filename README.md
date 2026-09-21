@@ -107,6 +107,24 @@ costumes/{id}
   type: "body" | "weapon" | "head"
   description: string
   endAt: timestamp        // momento exato em que o traje expira
-  notifyDaysBefore: number
+  sectionId: string | null
+  createdAt: timestamp
+
+sections/{id}
+  ownerUid: string
+  character: string
+  name: string
+  isDefault: boolean      // true só na secção "Geral", automática por personagem
+  order: number
+  createdAt: timestamp
+
+characters/{id}
+  ownerUid: string
+  name: string
+  order: number
   createdAt: timestamp
 ```
+
+As notificações do browser disparam quando falta menos de 1 dia para um traje expirar
+(fixo, não configurável por traje), repetindo a cada hora cheia se a opção "Repetir
+avisos a cada hora" estiver ligada (preferência guardada no browser, por utilizador).

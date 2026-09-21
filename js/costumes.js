@@ -25,17 +25,7 @@ export const COSTUME_ICONS = {
 };
 
 // Cria o traje. daysLeft/hoursLeft/minutesLeft definem quanto tempo falta A PARTIR DE AGORA.
-export function addCostume({
-  ownerUid,
-  character,
-  type,
-  description,
-  daysLeft,
-  hoursLeft,
-  minutesLeft,
-  notifyDaysBefore,
-  sectionId = null,
-}) {
+export function addCostume({ ownerUid, character, type, description, daysLeft, hoursLeft, minutesLeft, sectionId = null }) {
   const totalMinutes = (Number(daysLeft) || 0) * 24 * 60 + (Number(hoursLeft) || 0) * 60 + (Number(minutesLeft) || 0);
   const endAt = new Date(Date.now() + totalMinutes * 60 * 1000);
   return addDoc(collection(db, "costumes"), {
@@ -44,7 +34,6 @@ export function addCostume({
     type,
     description: description.trim(),
     endAt: Timestamp.fromDate(endAt),
-    notifyDaysBefore: Number(notifyDaysBefore) || 0,
     sectionId: sectionId || null,
     createdAt: serverTimestamp(),
   });
