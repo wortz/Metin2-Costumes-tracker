@@ -44,9 +44,10 @@ export function isAdmin() {
   return !!currentUser && currentUser.role === "admin";
 }
 
-// onAuthChange(callback): callback recebe (currentUser | null)
+// onAuthChange(callback): callback recebe (currentUser | null). Devolve a
+// função de unsubscribe do listener, para quem só precisa de um disparo único.
 export function onAuthChange(callback) {
-  onAuthStateChanged(auth, async (firebaseUser) => {
+  return onAuthStateChanged(auth, async (firebaseUser) => {
     if (!firebaseUser) {
       currentUser = null;
       callback(null);

@@ -130,6 +130,31 @@ button.danger:hover {
   min-height: 1em;
 }
 
+.hint-inline {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: block;
+  min-height: 1em;
+}
+
+.discord-dm-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.discord-dm-actions button {
+  flex: 1;
+}
+
+.hint-inline.success {
+  color: var(--success);
+}
+
+.hint-inline.error {
+  color: var(--danger);
+}
+
 .hint {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

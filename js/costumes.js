@@ -52,13 +52,23 @@ export function moveCostume(costumeId, { character, sectionId }) {
   });
 }
 
-// Renova o traje: define um novo tempo restante a partir de agora.
+// Renova o traje: define um novo tempo restante a partir de agora, e reseta os
+// avisos já disparados (para voltarem a acontecer neste novo prazo).
 export function renewCostume(costumeId, { daysLeft, hoursLeft, minutesLeft }) {
   const totalMinutes = (Number(daysLeft) || 0) * 24 * 60 + (Number(hoursLeft) || 0) * 60 + (Number(minutesLeft) || 0);
   const endAt = new Date(Date.now() + totalMinutes * 60 * 1000);
   return updateDoc(doc(db, "costumes", costumeId), {
     endAt: Timestamp.fromDate(endAt),
+    notifiedThreshold: false,
+    notified12h: false,
   });
+}
+
+// Marca que já se avisou para este traje num determinado estágio ("threshold" ou
+// "12h"), para não repetir o mesmo aviso. Partilhado entre o browser e o Worker.
+export function markCostumeNotified(costumeId, stage) {
+  const field = stage === "12h" ? "notified12h" : "notifiedThreshold";
+  return updateDoc(doc(db, "costumes", costumeId), { [field]: true });
 }
 
 // Subscreve em tempo real aos trajes de um utilizador. Devolve a função unsubscribe.

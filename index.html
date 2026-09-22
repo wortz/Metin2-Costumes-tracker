@@ -189,19 +189,32 @@
   <dialog id="settings-modal">
     <form id="settings-form" class="card">
       <h2>Configurações</h2>
-      <label class="checkbox-label">
-        <input type="checkbox" id="settings-notify-repeat" class="toggle-switch" />
-        Repetir avisos a cada hora (em vez de avisar só uma vez)
-      </label>
-      <label>Avisar no browser a a partir de (dias)
+      <label>Avisar a partir de (dias)
         <input type="number" id="settings-notify-days" min="1" step="1" />
       </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="settings-notify-repeat" class="toggle-switch" />
+        Repetir a notificação do browser a cada hora (em vez de avisar só uma vez)
+      </label>
+      <p class="hint-inline">A DM do Discord dispara sempre só 2 vezes: uma a este limiar, outra quando faltarem 12 horas ou menos — independentemente desta opção.</p>
       <label>Aviso (topo da página) a partir de (dias)
         <input type="number" id="settings-warning-days" min="1" step="1" />
       </label>
       <label>Alerta (topo da página) a partir de (dias)
         <input type="number" id="settings-alert-days" min="1" step="1" />
       </label>
+      <fieldset>
+        <legend>Discord — DM privada via bot (opcional)</legend>
+        <p class="hint-inline">Funciona mesmo com o site fechado — é verificado em fundo a cada hora.</p>
+        <label>O teu Discord User ID
+          <input id="settings-dm-user-id" placeholder="Ex: 123456789012345678" />
+        </label>
+        <div class="discord-dm-actions">
+          <button type="button" id="discord-login-btn" class="secondary">Obter automaticamente (login Discord)</button>
+          <button type="button" id="settings-dm-test" class="secondary">Testar DM</button>
+        </div>
+        <span id="settings-dm-test-result" class="hint-inline"></span>
+      </fieldset>
       <p id="settings-form-error" class="error"></p>
       <div class="modal-actions">
         <button type="button" id="settings-cancel" class="secondary">Cancelar</button>

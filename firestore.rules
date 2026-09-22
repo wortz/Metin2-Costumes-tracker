@@ -44,5 +44,12 @@ service cloud.firestore {
       allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isActive() && resource.data.ownerUid == request.auth.uid;
     }
+
+    // Preferências de notificação (Discord User ID, limiar de aviso) — só o
+    // próprio dono lê/escreve. O Cloudflare Worker lê isto com credenciais de
+    // serviço (Admin), que ignoram estas regras por completo.
+    match /userSettings/{uid} {
+      allow read, write: if isActive() && request.auth.uid == uid;
+    }
   }
 }

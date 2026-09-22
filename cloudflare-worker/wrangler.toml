@@ -1,0 +1,9 @@
+name = "costumes-tracker-discord-dm"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+FIREBASE_PROJECT_ID = "costumes-tracker"
+
+[triggers]
+crons = ["0 * * * *"]

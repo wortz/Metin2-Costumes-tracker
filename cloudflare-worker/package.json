@@ -1,0 +1,10 @@
+{
+  "name": "costumes-tracker-discord-dm",
+  "private": true,
+  "dependencies": {
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

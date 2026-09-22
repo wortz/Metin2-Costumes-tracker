@@ -28,18 +28,12 @@ import { createUser, disableUser, subscribeToUsers } from "./admin.js";
 import {
   requestNotificationPermission,
   checkCostumeNotifications,
-  clearNotified,
+  testDiscordDM,
   getNotifyRepeatSetting,
   setNotifyRepeatSetting,
 } from "./notifications.js";
-import {
-  getNotifyThresholdDays,
-  setNotifyThresholdDays,
-  getWarningThresholdDays,
-  setWarningThresholdDays,
-  getAlertThresholdDays,
-  setAlertThresholdDays,
-} from "./settings.js";
+import { DISCORD_OAUTH_CLIENT_ID } from "./settings.js";
+import { DEFAULT_USER_SETTINGS, getUserSettings, saveUserSettings, subscribeToUserSettings } from "./user-settings.js";
 
 // ---------- Elements ----------
 const loadingView = document.getElementById("loading-view");
@@ -100,10 +94,14 @@ const settingsModal = document.getElementById("settings-modal");
 const settingsForm = document.getElementById("settings-form");
 const settingsFormError = document.getElementById("settings-form-error");
 const settingsCancelBtn = document.getElementById("settings-cancel");
-const settingsNotifyRepeat = document.getElementById("settings-notify-repeat");
 const settingsNotifyDays = document.getElementById("settings-notify-days");
+const settingsNotifyRepeat = document.getElementById("settings-notify-repeat");
 const settingsWarningDays = document.getElementById("settings-warning-days");
 const settingsAlertDays = document.getElementById("settings-alert-days");
+const settingsDmUserId = document.getElementById("settings-dm-user-id");
+const settingsDmTestBtn = document.getElementById("settings-dm-test");
+const settingsDmTestResult = document.getElementById("settings-dm-test-result");
+const discordLoginBtn = document.getElementById("discord-login-btn");
 
 // ---------- State ----------
 let unsubscribeCostumes = null;
@@ -111,11 +109,13 @@ let unsubscribeSections = null;
 let unsubscribeCharacters = null;
 let unsubscribeUsers = null;
 let unsubscribeAllCostumes = null;
+let unsubscribeUserSettings = null;
 let latestCostumes = [];
 let latestSections = [];
 let latestCharacters = [];
 let latestUsers = [];
 let latestAllCostumes = [];
+let latestUserSettings = DEFAULT_USER_SETTINGS;
 let renewingCostume = null;
 let creatingSectionForCharacter = null;
 
@@ -169,6 +169,11 @@ onAuthChange((user, err) => {
     renderCostumes();
   });
 
+  unsubscribeUserSettings = subscribeToUserSettings(user.uid, (settings) => {
+    latestUserSettings = settings;
+    renderCostumes();
+  });
+
   if (admin) {
     unsubscribeUsers = subscribeToUsers((users) => {
       latestUsers = users;
@@ -191,12 +196,20 @@ function cleanupSubscriptions() {
   if (unsubscribeCharacters) unsubscribeCharacters();
   if (unsubscribeUsers) unsubscribeUsers();
   if (unsubscribeAllCostumes) unsubscribeAllCostumes();
-  unsubscribeCostumes = unsubscribeSections = unsubscribeCharacters = unsubscribeUsers = unsubscribeAllCostumes = null;
+  if (unsubscribeUserSettings) unsubscribeUserSettings();
+  unsubscribeCostumes =
+    unsubscribeSections =
+    unsubscribeCharacters =
+    unsubscribeUsers =
+    unsubscribeAllCostumes =
+    unsubscribeUserSettings =
+      null;
   latestCostumes = [];
   latestSections = [];
   latestCharacters = [];
   latestUsers = [];
   latestAllCostumes = [];
+  latestUserSettings = DEFAULT_USER_SETTINGS;
 }
 
 function friendlyAuthError(err) {
@@ -231,19 +244,92 @@ enableNotifBtn.addEventListener("click", () => {
   notifHint.hidden = true;
 });
 
+// ---------- Discord OAuth (obter o User ID automaticamente) ----------
+function discordRedirectUri() {
+  return window.location.origin + window.location.pathname;
+}
+
+discordLoginBtn.addEventListener("click", () => {
+  if (!DISCORD_OAUTH_CLIENT_ID || DISCORD_OAUTH_CLIENT_ID === "REPLACE_WITH_YOUR_DISCORD_CLIENT_ID") {
+    alert("O Client ID do Discord ainda não está configurado (js/settings.js).");
+    return;
+  }
+  const params = new URLSearchParams({
+    client_id: DISCORD_OAUTH_CLIENT_ID,
+    redirect_uri: discordRedirectUri(),
+    response_type: "token",
+    scope: "identify",
+  });
+  window.location.href = `https://discord.com/oauth2/authorize?${params.toString()}`;
+});
+
+async function handleDiscordOAuthRedirect() {
+  if (!window.location.hash.includes("access_token")) return;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const accessToken = params.get("access_token");
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+  if (!accessToken) return;
+
+  try {
+    const res = await fetch("https://discord.com/api/users/@me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) throw new Error("Falha ao obter o perfil do Discord.");
+    const user = await res.json();
+
+    if (!currentUser) {
+      await new Promise((resolve) => {
+        const unsub = onAuthChange((u) => {
+          if (u) {
+            unsub?.();
+            resolve();
+          }
+        });
+      });
+    }
+
+    const existing = await getUserSettings(currentUser.uid);
+    await saveUserSettings(currentUser.uid, { ...existing, discordUserId: user.id });
+    alert(`Discord ligado: ${user.username}\nID guardado automaticamente nas Configurações.`);
+  } catch (err) {
+    alert(err.message || "Erro ao ligar ao Discord.");
+  }
+}
+
+handleDiscordOAuthRedirect();
+
 // ---------- Settings modal ----------
 openSettingsBtn.addEventListener("click", () => {
   settingsFormError.textContent = "";
+  settingsDmTestResult.textContent = "";
+  settingsDmTestResult.className = "hint-inline";
+  settingsNotifyDays.value = latestUserSettings.notifyThresholdDays;
   settingsNotifyRepeat.checked = getNotifyRepeatSetting();
-  settingsNotifyDays.value = getNotifyThresholdDays();
-  settingsWarningDays.value = getWarningThresholdDays();
-  settingsAlertDays.value = getAlertThresholdDays();
+  settingsWarningDays.value = latestUserSettings.warningThresholdDays;
+  settingsAlertDays.value = latestUserSettings.alertThresholdDays;
+  settingsDmUserId.value = latestUserSettings.discordUserId;
   settingsModal.showModal();
 });
 
 settingsCancelBtn.addEventListener("click", () => settingsModal.close());
 
-settingsForm.addEventListener("submit", (e) => {
+settingsDmTestBtn.addEventListener("click", async () => {
+  const userId = settingsDmUserId.value.trim();
+  if (!userId) {
+    settingsDmTestResult.textContent = "Preenche primeiro o teu Discord User ID.";
+    settingsDmTestResult.className = "hint-inline error";
+    return;
+  }
+  settingsDmTestBtn.disabled = true;
+  settingsDmTestResult.textContent = "A enviar...";
+  settingsDmTestResult.className = "hint-inline";
+  const result = await testDiscordDM(userId);
+  settingsDmTestResult.textContent = result.ok ? "Enviado! Confirma a DM no Discord." : `Falhou — ${result.error}`;
+  settingsDmTestResult.className = result.ok ? "hint-inline success" : "hint-inline error";
+  settingsDmTestBtn.disabled = false;
+});
+
+settingsForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const notifyDays = Number(settingsNotifyDays.value);
   const warningDays = Number(settingsWarningDays.value);
@@ -254,17 +340,24 @@ settingsForm.addEventListener("submit", (e) => {
     return;
   }
 
-  setNotifyRepeatSetting(settingsNotifyRepeat.checked);
-  setNotifyThresholdDays(notifyDays);
-  setWarningThresholdDays(warningDays);
-  setAlertThresholdDays(alertDays);
-  settingsModal.close();
-  renderCostumes();
+  try {
+    setNotifyRepeatSetting(settingsNotifyRepeat.checked);
+    await saveUserSettings(currentUser.uid, {
+      notifyThresholdDays: notifyDays,
+      warningThresholdDays: warningDays,
+      alertThresholdDays: alertDays,
+      discordUserId: settingsDmUserId.value,
+    });
+    settingsModal.close();
+    renderCostumes();
+  } catch (err) {
+    settingsFormError.textContent = err.message || "Erro ao guardar as configurações.";
+  }
 });
 
 setInterval(() => {
   renderCostumes();
-  checkCostumeNotifications(latestCostumes, computeRemaining);
+  checkCostumeNotifications(latestCostumes, computeRemaining, latestUserSettings);
 }, 30000);
 
 // ---------- Costumes: render ----------
@@ -548,7 +641,6 @@ async function handleCostumeDrop(e, dropzoneEl) {
 
   try {
     await moveCostume(costumeId, { character: targetCharacter, sectionId: targetSectionId });
-    clearNotified(costumeId);
   } catch (err) {
     alert(err.message || "Erro ao mover o traje.");
   }
@@ -583,10 +675,10 @@ async function handleSectionDrop(e, containerEl, character) {
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 function renderExpiryBanner() {
-  const warningMs = getWarningThresholdDays() * ONE_DAY_MS;
-  const alertMs = getAlertThresholdDays() * ONE_DAY_MS;
-  const alertDays = getAlertThresholdDays();
-  const warningDays = getWarningThresholdDays();
+  const alertDays = latestUserSettings.alertThresholdDays;
+  const warningDays = latestUserSettings.warningThresholdDays;
+  const warningMs = warningDays * ONE_DAY_MS;
+  const alertMs = alertDays * ONE_DAY_MS;
 
   let expiredCount = 0;
   let soonCount = 0;
@@ -630,8 +722,8 @@ function renderExpiryBanner() {
 
 function buildCostumeCard(costume) {
   const remaining = computeRemaining(costume.endAt);
-  const isDanger = !remaining.expired && remaining.totalMs <= getAlertThresholdDays() * ONE_DAY_MS;
-  const isWarning = !remaining.expired && !isDanger && remaining.totalMs <= getWarningThresholdDays() * ONE_DAY_MS;
+  const isDanger = !remaining.expired && remaining.totalMs <= latestUserSettings.alertThresholdDays * ONE_DAY_MS;
+  const isWarning = !remaining.expired && !isDanger && remaining.totalMs <= latestUserSettings.warningThresholdDays * ONE_DAY_MS;
 
   const card = document.createElement("div");
   card.className =
@@ -792,7 +884,6 @@ renewForm.addEventListener("submit", async (e) => {
 
   try {
     await renewCostume(renewingCostume.id, { daysLeft, hoursLeft, minutesLeft });
-    clearNotified(renewingCostume.id);
     renewModal.close();
   } catch (err) {
     renewFormError.textContent = err.message || "Erro ao renovar o traje.";
