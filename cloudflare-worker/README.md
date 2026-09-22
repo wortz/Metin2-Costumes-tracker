@@ -67,9 +67,12 @@ Isto é o que permite ao Worker ler o Firestore sozinho, sem precisar do browser
 
 ## 6. Usar na app
 
-Cada utilizador, nas **⚙ Configurações** da app, na secção "Discord — DM privada via bot":
-1. Clica em **"Obter automaticamente (login Discord)"**, autoriza no Discord, e o campo do User ID preenche-se sozinho.
-2. Clica em **Guardar**.
-3. Usa o botão **"Testar DM"** para confirmar que recebe a mensagem.
+Cada utilizador, nas **⚙ Configurações** da app, na secção "Discord — DM privada via bot", pode ter **vários destinatários** (ex: ele próprio e um amigo/guild leader):
+1. Clica em **"Adicionar via login Discord"** para adicionares a tua própria conta automaticamente (nome + ID preenchidos sozinhos).
+2. Para outras pessoas, pede-lhes o Discord User ID delas (Modo de Programador → Copiar ID do Utilizador) e usa o campo "Nome" + "Discord User ID" com o botão **"+ Adicionar"**.
+3. Clica em **Guardar**.
+4. Usa o botão **"Testar DM"** para confirmar que todos os destinatários da lista recebem a mensagem.
+
+Quando um traje está prestes a expirar, a mensagem é enviada a **todos** os destinatários configurados.
 
 Não precisam de token, password, nem de ativar Modo de Programador — só o login do Discord.

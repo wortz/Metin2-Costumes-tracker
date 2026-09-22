@@ -206,9 +206,26 @@ function discordAlertMessage(costume, stage, remainingMs, endAt) {
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
+// Aceita a lista atual (com nome), ou os formatos antigos (de antes de haver
+// vários destinatários): uma lista simples de IDs, ou um único ID.
+function getRecipients(settings) {
+  if (!settings) return [];
+  if (Array.isArray(settings.discordRecipients)) {
+    return settings.discordRecipients.filter((r) => r && r.id);
+  }
+  if (Array.isArray(settings.discordUserIds)) {
+    return settings.discordUserIds.filter(Boolean).map((id) => ({ name: "", id }));
+  }
+  if (settings.discordUserId) {
+    return [{ name: "", id: settings.discordUserId }];
+  }
+  return [];
+}
+
 // Verifica todos os trajes de todos os utilizadores e envia, no máximo, 2 DMs
-// por traje: uma ao limiar definido pelo utilizador, outra às 12h ou menos.
-// Devolve um resumo (usado pela rota /debug-sweep para diagnóstico).
+// (a cada destinatário configurado) por traje: uma ao limiar definido pelo
+// utilizador, outra às 12h ou menos. Devolve um resumo (usado pela rota
+// /debug-sweep para diagnóstico).
 async function runNotificationSweep(env) {
   const accessToken = await getGoogleAccessToken(env);
   const projectId = env.FIREBASE_PROJECT_ID;
@@ -237,8 +254,9 @@ async function runNotificationSweep(env) {
       }
     }
     const settings = settingsCache.get(costume.ownerUid);
-    if (!settings || !settings.discordUserId) {
-      summary.skipped.push({ id: costume.id, reason: "sem discordUserId", ownerUid: costume.ownerUid });
+    const recipients = getRecipients(settings);
+    if (recipients.length === 0) {
+      summary.skipped.push({ id: costume.id, reason: "sem destinatários", ownerUid: costume.ownerUid });
       continue;
     }
 
@@ -249,22 +267,32 @@ async function runNotificationSweep(env) {
     // Se um traje já nascer com menos de 12h (salta logo o limiar do utilizador),
     // só manda o mais urgente (o "ALERTA IMPORTANTE"), não os dois de uma vez.
     if (remainingMs <= TWELVE_HOURS_MS && !costume.notified12h) {
-      try {
-        await sendDiscordDM(env, settings.discordUserId, discordAlertMessage(costume, "12h", remainingMs, endAt));
-        updates.notified12h = true;
-        if (!costume.notifiedThreshold) updates.notifiedThreshold = true;
-        summary.sent.push({ id: costume.id, stage: "12h", remainingHours });
-      } catch (err) {
-        summary.errors.push({ id: costume.id, stage: "12h", error: err.message });
+      const message = discordAlertMessage(costume, "12h", remainingMs, endAt);
+      const failures = [];
+      for (const recipient of recipients) {
+        try {
+          await sendDiscordDM(env, recipient.id, message);
+        } catch (err) {
+          failures.push(err.message);
+        }
       }
+      updates.notified12h = true;
+      if (!costume.notifiedThreshold) updates.notifiedThreshold = true;
+      if (failures.length > 0) summary.errors.push({ id: costume.id, stage: "12h", error: failures.join("; ") });
+      summary.sent.push({ id: costume.id, stage: "12h", remainingHours, recipients: recipients.length - failures.length });
     } else if (remainingMs <= thresholdMs && !costume.notifiedThreshold) {
-      try {
-        await sendDiscordDM(env, settings.discordUserId, discordAlertMessage(costume, "threshold", remainingMs, endAt));
-        updates.notifiedThreshold = true;
-        summary.sent.push({ id: costume.id, stage: "threshold", remainingHours });
-      } catch (err) {
-        summary.errors.push({ id: costume.id, stage: "threshold", error: err.message });
+      const message = discordAlertMessage(costume, "threshold", remainingMs, endAt);
+      const failures = [];
+      for (const recipient of recipients) {
+        try {
+          await sendDiscordDM(env, recipient.id, message);
+        } catch (err) {
+          failures.push(err.message);
+        }
       }
+      updates.notifiedThreshold = true;
+      if (failures.length > 0) summary.errors.push({ id: costume.id, stage: "threshold", error: failures.join("; ") });
+      summary.sent.push({ id: costume.id, stage: "threshold", remainingHours, recipients: recipients.length - failures.length });
     } else {
       summary.skipped.push({
         id: costume.id,

@@ -205,12 +205,15 @@
       </label>
       <fieldset>
         <legend>Discord — DM privada via bot (opcional)</legend>
-        <p class="hint-inline">Funciona mesmo com o site fechado — é verificado em fundo a cada hora.</p>
-        <label>O teu Discord User ID
-          <input id="settings-dm-user-id" placeholder="Ex: 123456789012345678" />
-        </label>
+        <p class="hint-inline">Funciona mesmo com o site fechado — é verificado em fundo a cada hora. Podes ter vários destinatários.</p>
+        <div id="dm-recipients-list" class="dm-recipients-list"></div>
+        <div class="dm-recipient-add-row">
+          <input id="settings-dm-new-name" placeholder="Nome (ex: o teu nick)" />
+          <input id="settings-dm-new-id" placeholder="Discord User ID" />
+          <button type="button" id="settings-dm-add" class="secondary">+ Adicionar</button>
+        </div>
         <div class="discord-dm-actions">
-          <button type="button" id="discord-login-btn" class="secondary">Obter automaticamente (login Discord)</button>
+          <button type="button" id="discord-login-btn" class="secondary">Adicionar via login Discord</button>
           <button type="button" id="settings-dm-test" class="secondary">Testar DM</button>
         </div>
         <span id="settings-dm-test-result" class="hint-inline"></span>

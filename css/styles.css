@@ -147,6 +147,46 @@ button.danger:hover {
   flex: 1;
 }
 
+.dm-recipients-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dm-recipient-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #12141c;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.dm-recipient-row .dm-recipient-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dm-recipient-row .dm-recipient-id {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.dm-recipient-add-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dm-recipient-add-row input {
+  flex: 1;
+  min-width: 120px;
+  width: auto;
+}
+
 .hint-inline.success {
   color: var(--success);
 }

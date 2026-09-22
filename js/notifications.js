@@ -118,21 +118,24 @@ function checkBrowserNotifications(costumes, computeRemaining, thresholdMs) {
 // DM no Discord: no máximo 2 avisos por traje — ao limiar do utilizador e às
 // 12h ou menos — independentemente da preferência de repetição. Se um traje já
 // nascer com menos de 12h (salta logo o limiar), só manda o mais urgente (o
-// "ALERTA IMPORTANTE"), não os dois de uma vez. Estado guardado no próprio
-// traje (Firestore), partilhado com o Worker que corre em fundo.
-function checkDiscordDMs(costumes, computeRemaining, thresholdMs, discordUserId) {
-  if (!discordUserId || !auth.currentUser) return;
+// "ALERTA IMPORTANTE"), não os dois de uma vez. Manda a todos os destinatários
+// configurados. Estado guardado no próprio traje (Firestore), partilhado com
+// o Worker que corre em fundo.
+function checkDiscordDMs(costumes, computeRemaining, thresholdMs, recipients) {
+  if (!recipients || recipients.length === 0 || !auth.currentUser) return;
 
   for (const costume of costumes) {
     const remaining = computeRemaining(costume.endAt);
     if (remaining.expired) continue;
 
     if (remaining.totalMs <= TWELVE_HOURS_MS && !costume.notified12h) {
-      sendDiscordDM(discordUserId, discordAlertMessage(costume, "12h", remaining));
+      const message = discordAlertMessage(costume, "12h", remaining);
+      for (const recipient of recipients) sendDiscordDM(recipient.id, message);
       markCostumeNotified(costume.id, "12h");
       if (!costume.notifiedThreshold) markCostumeNotified(costume.id, "threshold");
     } else if (remaining.totalMs <= thresholdMs && !costume.notifiedThreshold) {
-      sendDiscordDM(discordUserId, discordAlertMessage(costume, "threshold", remaining));
+      const message = discordAlertMessage(costume, "threshold", remaining);
+      for (const recipient of recipients) sendDiscordDM(recipient.id, message);
       markCostumeNotified(costume.id, "threshold");
     }
   }
@@ -141,5 +144,5 @@ function checkDiscordDMs(costumes, computeRemaining, thresholdMs, discordUserId)
 export function checkCostumeNotifications(costumes, computeRemaining, userSettings) {
   const thresholdMs = (userSettings?.notifyThresholdDays || 1) * 24 * 60 * 60 * 1000;
   checkBrowserNotifications(costumes, computeRemaining, thresholdMs);
-  checkDiscordDMs(costumes, computeRemaining, thresholdMs, userSettings?.discordUserId);
+  checkDiscordDMs(costumes, computeRemaining, thresholdMs, userSettings?.discordRecipients);
 }

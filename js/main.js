@@ -98,7 +98,10 @@ const settingsNotifyDays = document.getElementById("settings-notify-days");
 const settingsNotifyRepeat = document.getElementById("settings-notify-repeat");
 const settingsWarningDays = document.getElementById("settings-warning-days");
 const settingsAlertDays = document.getElementById("settings-alert-days");
-const settingsDmUserId = document.getElementById("settings-dm-user-id");
+const dmRecipientsListEl = document.getElementById("dm-recipients-list");
+const settingsDmNewName = document.getElementById("settings-dm-new-name");
+const settingsDmNewId = document.getElementById("settings-dm-new-id");
+const settingsDmAddBtn = document.getElementById("settings-dm-add");
 const settingsDmTestBtn = document.getElementById("settings-dm-test");
 const settingsDmTestResult = document.getElementById("settings-dm-test-result");
 const discordLoginBtn = document.getElementById("discord-login-btn");
@@ -118,6 +121,7 @@ let latestAllCostumes = [];
 let latestUserSettings = DEFAULT_USER_SETTINGS;
 let renewingCostume = null;
 let creatingSectionForCharacter = null;
+let settingsDmRecipientsState = [];
 
 // ---------- Auth ----------
 loginForm.addEventListener("submit", async (e) => {
@@ -289,8 +293,10 @@ async function handleDiscordOAuthRedirect() {
     }
 
     const existing = await getUserSettings(currentUser.uid);
-    await saveUserSettings(currentUser.uid, { ...existing, discordUserId: user.id });
-    alert(`Discord ligado: ${user.username}\nID guardado automaticamente nas Configurações.`);
+    const recipients = existing.discordRecipients.filter((r) => r.id !== user.id);
+    recipients.push({ name: user.username, id: user.id });
+    await saveUserSettings(currentUser.uid, { ...existing, discordRecipients: recipients });
+    alert(`Discord ligado: ${user.username}\nAdicionado à lista de destinatários nas Configurações.`);
   } catch (err) {
     alert(err.message || "Erro ao ligar ao Discord.");
   }
@@ -299,6 +305,53 @@ async function handleDiscordOAuthRedirect() {
 handleDiscordOAuthRedirect();
 
 // ---------- Settings modal ----------
+function renderDmRecipientsList() {
+  dmRecipientsListEl.innerHTML = "";
+  if (settingsDmRecipientsState.length === 0) {
+    dmRecipientsListEl.innerHTML = '<p class="hint-inline">Ainda não tens destinatários.</p>';
+    return;
+  }
+  for (const recipient of settingsDmRecipientsState) {
+    const row = document.createElement("div");
+    row.className = "dm-recipient-row";
+    row.innerHTML = `
+      <span><span class="dm-recipient-name">${escapeHtml(recipient.name || "(sem nome)")}</span> <span class="dm-recipient-id">${escapeHtml(recipient.id)}</span></span>
+    `;
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "icon-btn small";
+    removeBtn.textContent = "×";
+    removeBtn.title = "Remover";
+    removeBtn.addEventListener("click", () => {
+      settingsDmRecipientsState = settingsDmRecipientsState.filter((r) => r.id !== recipient.id);
+      renderDmRecipientsList();
+    });
+    row.appendChild(removeBtn);
+    dmRecipientsListEl.appendChild(row);
+  }
+}
+
+settingsDmAddBtn.addEventListener("click", () => {
+  const name = settingsDmNewName.value.trim();
+  const id = settingsDmNewId.value.trim();
+  if (!id) {
+    settingsDmTestResult.textContent = "Indica o Discord User ID a adicionar.";
+    settingsDmTestResult.className = "hint-inline error";
+    return;
+  }
+  if (settingsDmRecipientsState.some((r) => r.id === id)) {
+    settingsDmTestResult.textContent = "Esse ID já está na lista.";
+    settingsDmTestResult.className = "hint-inline error";
+    return;
+  }
+  settingsDmRecipientsState.push({ name, id });
+  settingsDmNewName.value = "";
+  settingsDmNewId.value = "";
+  settingsDmTestResult.textContent = "";
+  settingsDmTestResult.className = "hint-inline";
+  renderDmRecipientsList();
+});
+
 openSettingsBtn.addEventListener("click", () => {
   settingsFormError.textContent = "";
   settingsDmTestResult.textContent = "";
@@ -307,25 +360,31 @@ openSettingsBtn.addEventListener("click", () => {
   settingsNotifyRepeat.checked = getNotifyRepeatSetting();
   settingsWarningDays.value = latestUserSettings.warningThresholdDays;
   settingsAlertDays.value = latestUserSettings.alertThresholdDays;
-  settingsDmUserId.value = latestUserSettings.discordUserId;
+  settingsDmRecipientsState = latestUserSettings.discordRecipients.map((r) => ({ ...r }));
+  settingsDmNewName.value = "";
+  settingsDmNewId.value = "";
+  renderDmRecipientsList();
   settingsModal.showModal();
 });
 
 settingsCancelBtn.addEventListener("click", () => settingsModal.close());
 
 settingsDmTestBtn.addEventListener("click", async () => {
-  const userId = settingsDmUserId.value.trim();
-  if (!userId) {
-    settingsDmTestResult.textContent = "Preenche primeiro o teu Discord User ID.";
+  if (settingsDmRecipientsState.length === 0) {
+    settingsDmTestResult.textContent = "Adiciona primeiro pelo menos um destinatário.";
     settingsDmTestResult.className = "hint-inline error";
     return;
   }
   settingsDmTestBtn.disabled = true;
   settingsDmTestResult.textContent = "A enviar...";
   settingsDmTestResult.className = "hint-inline";
-  const result = await testDiscordDM(userId);
-  settingsDmTestResult.textContent = result.ok ? "Enviado! Confirma a DM no Discord." : `Falhou — ${result.error}`;
-  settingsDmTestResult.className = result.ok ? "hint-inline success" : "hint-inline error";
+  const results = await Promise.all(settingsDmRecipientsState.map((r) => testDiscordDM(r.id)));
+  const failed = results.filter((r) => !r.ok);
+  settingsDmTestResult.textContent =
+    failed.length === 0
+      ? `Enviado a ${results.length} destinatário${results.length > 1 ? "s" : ""}! Confirma no Discord.`
+      : `${results.length - failed.length}/${results.length} enviados. Falhas: ${failed.map((f) => f.error).join(", ")}`;
+  settingsDmTestResult.className = failed.length === 0 ? "hint-inline success" : "hint-inline error";
   settingsDmTestBtn.disabled = false;
 });
 
@@ -346,7 +405,7 @@ settingsForm.addEventListener("submit", async (e) => {
       notifyThresholdDays: notifyDays,
       warningThresholdDays: warningDays,
       alertThresholdDays: alertDays,
-      discordUserId: settingsDmUserId.value,
+      discordRecipients: settingsDmRecipientsState,
     });
     settingsModal.close();
     renderCostumes();
