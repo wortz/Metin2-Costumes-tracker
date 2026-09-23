@@ -1,6 +1,6 @@
 import { DISCORD_DM_WORKER_URL } from "./settings.js";
 import { auth } from "./firebase-init.js";
-import { markCostumeNotified, COSTUME_TYPES, formatEndDate } from "./costumes.js";
+import { markCostumeNotified, COSTUME_TYPES } from "./costumes.js";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const REPEAT_SETTING_KEY = "metin2-costumes-notify-repeat";
@@ -68,15 +68,24 @@ function alertBody(costume, remaining) {
   return `${costume.character} — ${costume.description || "traje"} termina em ${remaining.days}d ${remaining.hours}h ${remaining.minutes}m`;
 }
 
+// Formata a data/hora fixa em hora de Portugal (Europe/Lisbon), independente
+// do fuso horário de quem/onde corre o código (browser do utilizador, ou o
+// Worker que corre em UTC) — ajusta-se sozinho ao horário de inverno/verão.
+function formatDiscordEndDate(date) {
+  const datePart = date.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Lisbon" });
+  const timePart = date.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Lisbon" });
+  return `${datePart}, ${timePart} PT`;
+}
+
 // Mensagem para o Discord, no formato pedido: "AVISO: Traje de X do personagem
-// Y (descrição) a terminar em Z horas - DD/MM/AAAA HH:MM" (ou "ALERTA
+// Y (descrição) a terminar em Z horas - DD/MM, HH:MM PT" (ou "ALERTA
 // IMPORTANTE" nas 12h).
 function discordAlertMessage(costume, stage, remaining) {
   const prefix = stage === "12h" ? "🚨 ALERTA IMPORTANTE" : "⚠️ AVISO";
   const typeLabel = COSTUME_TYPES[costume.type] || costume.type;
   const descPart = costume.description ? ` (${costume.description})` : "";
   const hours = Math.floor(remaining.totalMs / (60 * 60 * 1000));
-  return `${prefix}: Traje de ${typeLabel} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatEndDate(remaining.endDate)}`;
+  return `${prefix}: Traje de ${typeLabel} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatDiscordEndDate(remaining.endDate)}`;
 }
 
 // Notificações do browser: um único limiar (definido pelo utilizador), que

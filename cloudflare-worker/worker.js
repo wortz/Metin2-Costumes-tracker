@@ -184,14 +184,14 @@ const COSTUME_TYPES = {
   head: "Cabeça",
 };
 
+// Formata a data/hora fixa em hora de Portugal (Europe/Lisbon) — este Worker
+// corre em UTC por padrão, por isso é preciso fixar o fuso explicitamente para
+// não ficar 1h atrasado em horário de verão. Ajusta-se sozinho ao
+// inverno/verão, tal como o mesmo helper no cliente (js/notifications.js).
 function formatEndDate(endAt) {
-  return endAt.toLocaleString("pt-PT", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const datePart = endAt.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Lisbon" });
+  const timePart = endAt.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Lisbon" });
+  return `${datePart}, ${timePart} PT`;
 }
 
 // Mesmo formato usado pelo cliente (js/notifications.js), para as mensagens
