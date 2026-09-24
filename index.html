@@ -73,7 +73,11 @@
     <form id="costume-form" class="card">
       <h2>Adicionar traje</h2>
       <label>Personagem
-        <input id="costume-character" required placeholder="Nome da personagem" />
+        <div class="combo">
+          <input id="costume-character" required autocomplete="off" placeholder="Escolhe uma existente ou escreve uma nova" />
+          <button type="button" id="costume-character-toggle" class="combo-toggle" aria-label="Mostrar personagens">▾</button>
+          <div id="costume-character-list" class="combo-list" hidden></div>
+        </div>
       </label>
       <div class="field-label">Tipo</div>
       <div class="type-picker" id="costume-type-picker">

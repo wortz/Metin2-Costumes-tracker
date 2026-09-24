@@ -868,9 +868,65 @@ costumeTypePicker.addEventListener("click", (e) => {
   selectCostumeType(btn.dataset.type);
 });
 
+const characterInput = document.getElementById("costume-character");
+const characterListEl = document.getElementById("costume-character-list");
+let characterNamesForCombo = [];
+
+function populateCharacterOptions() {
+  characterNamesForCombo = [
+    ...new Set([
+      ...latestCharacters.map((c) => c.name),
+      ...latestCostumes.map((c) => c.character),
+      ...latestSections.map((s) => s.character),
+    ]),
+  ].sort((a, b) => a.localeCompare(b, "pt"));
+  characterListEl.hidden = true;
+}
+
+function showCharacterOptions({ all = false } = {}) {
+  const filter = all ? "" : characterInput.value.trim().toLowerCase();
+  if (!all && !filter) {
+    characterListEl.hidden = true;
+    return;
+  }
+  const matches = characterNamesForCombo.filter((name) => name.toLowerCase().startsWith(filter));
+  characterListEl.innerHTML = "";
+  if (matches.length === 0) {
+    characterListEl.hidden = true;
+    return;
+  }
+  for (const name of matches) {
+    const option = document.createElement("div");
+    option.className = "combo-option";
+    option.textContent = name;
+    option.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      characterInput.value = name;
+      characterListEl.hidden = true;
+    });
+    characterListEl.appendChild(option);
+  }
+  characterListEl.hidden = false;
+}
+
+characterInput.addEventListener("input", () => showCharacterOptions());
+characterInput.addEventListener("blur", () => {
+  characterListEl.hidden = true;
+});
+document.getElementById("costume-character-toggle").addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  if (!characterListEl.hidden) {
+    characterListEl.hidden = true;
+    return;
+  }
+  characterInput.focus();
+  showCharacterOptions({ all: true });
+});
+
 addCostumeBtn.addEventListener("click", () => {
   costumeForm.reset();
   costumeFormError.textContent = "";
+  populateCharacterOptions();
   selectCostumeType("body");
   costumeModal.showModal();
 });
