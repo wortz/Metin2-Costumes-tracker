@@ -29,6 +29,7 @@ import {
   requestNotificationPermission,
   checkCostumeNotifications,
   testDiscordDM,
+  notifyCostumeRenewed,
   getNotifyRepeatSetting,
   setNotifyRepeatSetting,
 } from "./notifications.js";
@@ -999,6 +1000,7 @@ renewForm.addEventListener("submit", async (e) => {
 
   try {
     await renewCostume(renewingCostume.id, { daysLeft, hoursLeft, minutesLeft });
+    notifyCostumeRenewed(renewingCostume, { daysLeft, hoursLeft, minutesLeft }, latestUserSettings.discordRecipients);
     renewModal.close();
   } catch (err) {
     renewFormError.textContent = err.message || "Erro ao renovar o traje.";

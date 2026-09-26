@@ -88,6 +88,23 @@ function discordAlertMessage(costume, stage, remaining) {
   return `${prefix}: Traje de ${typeLabel} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatDiscordEndDate(remaining.endDate)}`;
 }
 
+// Avisa todos os destinatários do Discord de que um traje foi renovado, com o
+// novo tempo de duração e a nova data de fim. Só avisa se o traje já tinha
+// disparado algum aviso no Discord (ou seja, se as pessoas já sabiam que
+// estava a acabar) — senão não há nada a "resolver" e não manda nada.
+export function notifyCostumeRenewed(costume, { daysLeft, hoursLeft, minutesLeft }, recipients) {
+  if (!recipients || recipients.length === 0 || !auth.currentUser) return;
+  if (!costume.notifiedThreshold && !costume.notified12h) return;
+  const days = Number(daysLeft) || 0;
+  const hours = Number(hoursLeft) || 0;
+  const minutes = Number(minutesLeft) || 0;
+  const endDate = new Date(Date.now() + ((days * 24 + hours) * 60 + minutes) * 60 * 1000);
+  const typeLabel = COSTUME_TYPES[costume.type] || costume.type;
+  const descPart = costume.description ? ` (${costume.description})` : "";
+  const message = `✅ Traje de ${typeLabel} do personagem ${costume.character}${descPart} renovado - novo tempo: ${days}d ${hours}h ${minutes}m - ${formatDiscordEndDate(endDate)}`;
+  for (const recipient of recipients) sendDiscordDM(recipient.id, message);
+}
+
 // Notificações do browser: um único limiar (definido pelo utilizador), que
 // repete a cada hora cheia enquanto a preferência "repetir" estiver ligada, ou
 // dispara só uma vez caso contrário. Estado guardado no browser (não precisa
