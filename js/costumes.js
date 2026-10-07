@@ -11,6 +11,7 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { db } from "./firebase-init.js";
+import { collectionsFor } from "./kinds.js";
 
 export const COSTUME_TYPES = {
   body: "Corpo",
@@ -24,11 +25,19 @@ export const COSTUME_ICONS = {
   head: "assets/icons/head.png",
 };
 
-// Cria o traje. daysLeft/hoursLeft/minutesLeft definem quanto tempo falta A PARTIR DE AGORA.
-export function addCostume({ ownerUid, character, type, description, daysLeft, hoursLeft, minutesLeft, sectionId = null }) {
+export function toDurationMs({ daysLeft, hoursLeft, minutesLeft }) {
   const totalMinutes = (Number(daysLeft) || 0) * 24 * 60 + (Number(hoursLeft) || 0) * 60 + (Number(minutesLeft) || 0);
-  const endAt = new Date(Date.now() + totalMinutes * 60 * 1000);
-  return addDoc(collection(db, "costumes"), {
+  return totalMinutes * 60 * 1000;
+}
+
+// Cria o traje/pet. daysLeft/hoursLeft/minutesLeft definem quanto tempo falta A PARTIR DE AGORA.
+// No caso dos pets esse tempo é também a duração fixa (guardada em durationMs),
+// à qual o pet volta sempre que é renovado.
+export function addCostume({ ownerUid, character, type = null, description, daysLeft, hoursLeft, minutesLeft, sectionId = null, kind = "costume", remainingMs = null }) {
+  const durationMs = toDurationMs({ daysLeft, hoursLeft, minutesLeft });
+  // Pet que já começou: o tempo restante atual pode ser menor que a duração total.
+  const endAt = new Date(Date.now() + (remainingMs || durationMs));
+  const data = {
     ownerUid,
     character: character.trim(),
     type,
@@ -36,17 +45,19 @@ export function addCostume({ ownerUid, character, type, description, daysLeft, h
     endAt: Timestamp.fromDate(endAt),
     sectionId: sectionId || null,
     createdAt: serverTimestamp(),
-  });
+  };
+  if (kind === "pet") data.durationMs = durationMs;
+  return addDoc(collection(db, collectionsFor(kind).items), data);
 }
 
-export function deleteCostume(costumeId) {
-  return deleteDoc(doc(db, "costumes", costumeId));
+export function deleteCostume(costumeId, kind = "costume") {
+  return deleteDoc(doc(db, collectionsFor(kind).items, costumeId));
 }
 
 // Move um traje para outra personagem/secção (drag-and-drop). A ordem dentro da
 // secção é sempre pelo tempo restante, por isso não há posição manual a guardar.
-export function moveCostume(costumeId, { character, sectionId }) {
-  return updateDoc(doc(db, "costumes", costumeId), {
+export function moveCostume(costumeId, { character, sectionId }, kind = "costume") {
+  return updateDoc(doc(db, collectionsFor(kind).items, costumeId), {
     character,
     sectionId: sectionId || null,
   });
@@ -55,8 +66,7 @@ export function moveCostume(costumeId, { character, sectionId }) {
 // Renova o traje: define um novo tempo restante a partir de agora, e reseta os
 // avisos já disparados (para voltarem a acontecer neste novo prazo).
 export function renewCostume(costumeId, { daysLeft, hoursLeft, minutesLeft }) {
-  const totalMinutes = (Number(daysLeft) || 0) * 24 * 60 + (Number(hoursLeft) || 0) * 60 + (Number(minutesLeft) || 0);
-  const endAt = new Date(Date.now() + totalMinutes * 60 * 1000);
+  const endAt = new Date(Date.now() + toDurationMs({ daysLeft, hoursLeft, minutesLeft }));
   return updateDoc(doc(db, "costumes", costumeId), {
     endAt: Timestamp.fromDate(endAt),
     notifiedThreshold: false,
@@ -64,16 +74,25 @@ export function renewCostume(costumeId, { daysLeft, hoursLeft, minutesLeft }) {
   });
 }
 
+// Renova o pet: volta sempre à duração fixa com que foi criado.
+export function renewPet(petId, durationMs) {
+  return updateDoc(doc(db, "pets", petId), {
+    endAt: Timestamp.fromDate(new Date(Date.now() + durationMs)),
+    notifiedThreshold: false,
+    notified12h: false,
+  });
+}
+
 // Marca que já se avisou para este traje num determinado estágio ("threshold" ou
 // "12h"), para não repetir o mesmo aviso. Partilhado entre o browser e o Worker.
-export function markCostumeNotified(costumeId, stage) {
+export function markCostumeNotified(costumeId, stage, kind = "costume") {
   const field = stage === "12h" ? "notified12h" : "notifiedThreshold";
-  return updateDoc(doc(db, "costumes", costumeId), { [field]: true });
+  return updateDoc(doc(db, collectionsFor(kind).items, costumeId), { [field]: true });
 }
 
 // Subscreve em tempo real aos trajes de um utilizador. Devolve a função unsubscribe.
-export function subscribeToOwnCostumes(ownerUid, onChange) {
-  const q = query(collection(db, "costumes"), where("ownerUid", "==", ownerUid));
+export function subscribeToOwnCostumes(ownerUid, onChange, kind = "costume") {
+  const q = query(collection(db, collectionsFor(kind).items), where("ownerUid", "==", ownerUid));
   return onSnapshot(q, (snap) => {
     const costumes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     onChange(costumes);
@@ -81,8 +100,8 @@ export function subscribeToOwnCostumes(ownerUid, onChange) {
 }
 
 // Usado pelo admin para contar trajes de todos os utilizadores.
-export function subscribeToAllCostumes(onChange) {
-  return onSnapshot(collection(db, "costumes"), (snap) => {
+export function subscribeToAllCostumes(onChange, kind = "costume") {
+  return onSnapshot(collection(db, collectionsFor(kind).items), (snap) => {
     const costumes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     onChange(costumes);
   });

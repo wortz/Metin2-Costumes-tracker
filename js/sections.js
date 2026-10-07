@@ -13,10 +13,11 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { db } from "./firebase-init.js";
+import { collectionsFor } from "./kinds.js";
 
 // Cria uma sub-secção dentro de uma personagem.
-export function addSection({ ownerUid, character, name, order }) {
-  return addDoc(collection(db, "sections"), {
+export function addSection({ ownerUid, character, name, order, kind = "costume" }) {
+  return addDoc(collection(db, collectionsFor(kind).sections), {
     ownerUid,
     character,
     name: name.trim(),
@@ -30,9 +31,9 @@ export function addSection({ ownerUid, character, name, order }) {
 // determinístico — mesmo que seja chamado várias vezes em simultâneo (várias renderizações
 // antes da primeira escrita chegar via onSnapshot), nunca cria mais do que um documento,
 // porque todas as chamadas escrevem no mesmo ID em vez de criarem IDs aleatórios.
-export async function ensureDefaultSection({ ownerUid, character }) {
+export async function ensureDefaultSection({ ownerUid, character, kind = "costume" }) {
   const id = `default__${ownerUid}__${encodeURIComponent(character)}`;
-  const ref = doc(db, "sections", id);
+  const ref = doc(db, collectionsFor(kind).sections, id);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
     await setDoc(ref, {
@@ -47,17 +48,18 @@ export async function ensureDefaultSection({ ownerUid, character }) {
   return id;
 }
 
-// Apaga a secção; os trajes que lá estavam passam para fallbackSectionId (normalmente a secção "Geral").
-export async function deleteSection(sectionId, fallbackSectionId = null) {
-  const costumesSnap = await getDocs(query(collection(db, "costumes"), where("sectionId", "==", sectionId)));
+// Apaga a secção; os itens que lá estavam passam para fallbackSectionId (normalmente a secção "Geral").
+export async function deleteSection(sectionId, fallbackSectionId = null, kind = "costume") {
+  const cols = collectionsFor(kind);
+  const itemsSnap = await getDocs(query(collection(db, cols.items), where("sectionId", "==", sectionId)));
   const batch = writeBatch(db);
-  costumesSnap.forEach((docSnap) => batch.update(docSnap.ref, { sectionId: fallbackSectionId }));
-  batch.delete(doc(db, "sections", sectionId));
+  itemsSnap.forEach((docSnap) => batch.update(docSnap.ref, { sectionId: fallbackSectionId }));
+  batch.delete(doc(db, cols.sections, sectionId));
   return batch.commit();
 }
 
-export function subscribeToOwnSections(ownerUid, onChange) {
-  const q = query(collection(db, "sections"), where("ownerUid", "==", ownerUid));
+export function subscribeToOwnSections(ownerUid, onChange, kind = "costume") {
+  const q = query(collection(db, collectionsFor(kind).sections), where("ownerUid", "==", ownerUid));
   return onSnapshot(q, (snap) => {
     const sections = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     onChange(sections);
@@ -65,10 +67,10 @@ export function subscribeToOwnSections(ownerUid, onChange) {
 }
 
 // Aplica uma nova ordem a várias secções de uma vez (reordenar dentro da mesma personagem).
-export function reorderSections(updates) {
+export function reorderSections(updates, kind = "costume") {
   const batch = writeBatch(db);
   for (const { id, order } of updates) {
-    batch.update(doc(db, "sections", id), { order });
+    batch.update(doc(db, collectionsFor(kind).sections, id), { order });
   }
   return batch.commit();
 }

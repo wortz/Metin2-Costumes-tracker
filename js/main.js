@@ -5,6 +5,8 @@ import {
   addCostume,
   deleteCostume,
   renewCostume,
+  renewPet,
+  toDurationMs,
   moveCostume,
   subscribeToOwnCostumes,
   subscribeToAllCostumes,
@@ -44,7 +46,10 @@ const loginForm = document.getElementById("login-form");
 const loginError = document.getElementById("login-error");
 const logoutBtn = document.getElementById("logout-btn");
 const userEmailEl = document.getElementById("user-email");
-const tabsEl = document.getElementById("tabs");
+const backMenuBtn = document.getElementById("back-menu-btn");
+const menuViewEl = document.getElementById("menu-view");
+const menuAdminTile = document.getElementById("menu-admin-tile");
+const listTitleEl = document.getElementById("list-title");
 const costumesViewEl = document.getElementById("costumes-view");
 const adminViewEl = document.getElementById("admin-view");
 const costumesListEl = document.getElementById("costumes-list");
@@ -59,6 +64,11 @@ const costumeFormError = document.getElementById("costume-form-error");
 const costumeCancelBtn = document.getElementById("costume-cancel");
 const costumeTypePicker = document.getElementById("costume-type-picker");
 const costumeTypeInput = document.getElementById("costume-type");
+const costumeModalTitle = document.getElementById("costume-modal-title");
+const costumeTypeLabel = document.getElementById("costume-type-label");
+const costumeDescLabel = document.getElementById("costume-desc-label");
+const costumeRemainingFieldset = document.getElementById("costume-remaining-fieldset");
+const costumeTimeLegend = document.getElementById("costume-time-legend");
 
 const renewModal = document.getElementById("renew-modal");
 const renewForm = document.getElementById("renew-form");
@@ -108,17 +118,21 @@ const settingsDmTestResult = document.getElementById("settings-dm-test-result");
 const discordLoginBtn = document.getElementById("discord-login-btn");
 
 // ---------- State ----------
-let unsubscribeCostumes = null;
-let unsubscribeSections = null;
-let unsubscribeCharacters = null;
-let unsubscribeUsers = null;
-let unsubscribeAllCostumes = null;
-let unsubscribeUserSettings = null;
+let unsubscribers = [];
+// Trajes e pets têm dados separados, mas ambos ficam sempre subscritos (para as
+// notificações funcionarem nos dois). As variáveis latest* abaixo espelham o
+// sistema que está aberto no momento (currentKind).
+const store = {
+  costume: { items: [], sections: [], characters: [] },
+  pet: { items: [], sections: [], characters: [] },
+};
+let currentKind = "costume";
 let latestCostumes = [];
 let latestSections = [];
 let latestCharacters = [];
 let latestUsers = [];
 let latestAllCostumes = [];
+let latestAllPets = [];
 let latestUserSettings = DEFAULT_USER_SETTINGS;
 let renewingCostume = null;
 let creatingSectionForCharacter = null;
@@ -156,38 +170,45 @@ onAuthChange((user, err) => {
   userEmailEl.textContent = user.displayName;
 
   const admin = isAdmin();
-  tabsEl.hidden = !admin;
-  if (!admin) switchTab("costumes-view");
+  menuAdminTile.hidden = !admin;
+  showView("menu");
 
-  unsubscribeCostumes = subscribeToOwnCostumes(user.uid, (costumes) => {
-    latestCostumes = costumes;
-    renderCostumes();
-  });
+  for (const kind of ["costume", "pet"]) {
+    unsubscribers.push(
+      subscribeToOwnCostumes(user.uid, (items) => setStore(kind, "items", items), kind),
+      subscribeToOwnSections(user.uid, (sections) => setStore(kind, "sections", sections), kind)
+    );
+  }
+  // As personagens são partilhadas entre trajes e pets: uma única coleção.
+  unsubscribers.push(
+    subscribeToOwnCharacters(user.uid, (characters) => {
+      setStore("costume", "characters", characters);
+      setStore("pet", "characters", characters);
+    })
+  );
 
-  unsubscribeSections = subscribeToOwnSections(user.uid, (sections) => {
-    latestSections = sections;
-    renderCostumes();
-  });
-
-  unsubscribeCharacters = subscribeToOwnCharacters(user.uid, (characters) => {
-    latestCharacters = characters;
-    renderCostumes();
-  });
-
-  unsubscribeUserSettings = subscribeToUserSettings(user.uid, (settings) => {
-    latestUserSettings = settings;
-    renderCostumes();
-  });
+  unsubscribers.push(
+    subscribeToUserSettings(user.uid, (settings) => {
+      latestUserSettings = settings;
+      renderCostumes();
+    })
+  );
 
   if (admin) {
-    unsubscribeUsers = subscribeToUsers((users) => {
-      latestUsers = users;
-      renderUsers();
-    });
-    unsubscribeAllCostumes = subscribeToAllCostumes((costumes) => {
-      latestAllCostumes = costumes;
-      renderUsers();
-    });
+    unsubscribers.push(
+      subscribeToUsers((users) => {
+        latestUsers = users;
+        renderUsers();
+      }),
+      subscribeToAllCostumes((costumes) => {
+        latestAllCostumes = costumes;
+        renderUsers();
+      }),
+      subscribeToAllCostumes((pets) => {
+        latestAllPets = pets;
+        renderUsers();
+      }, "pet")
+    );
   }
 
   if ("Notification" in window && Notification.permission === "default") {
@@ -195,25 +216,28 @@ onAuthChange((user, err) => {
   }
 });
 
+function setStore(kind, field, value) {
+  store[kind][field] = value;
+  if (kind === currentKind) {
+    syncCurrentKind();
+    renderCostumes();
+  }
+}
+
+function syncCurrentKind() {
+  latestCostumes = store[currentKind].items;
+  latestSections = store[currentKind].sections;
+  latestCharacters = store[currentKind].characters;
+}
+
 function cleanupSubscriptions() {
-  if (unsubscribeCostumes) unsubscribeCostumes();
-  if (unsubscribeSections) unsubscribeSections();
-  if (unsubscribeCharacters) unsubscribeCharacters();
-  if (unsubscribeUsers) unsubscribeUsers();
-  if (unsubscribeAllCostumes) unsubscribeAllCostumes();
-  if (unsubscribeUserSettings) unsubscribeUserSettings();
-  unsubscribeCostumes =
-    unsubscribeSections =
-    unsubscribeCharacters =
-    unsubscribeUsers =
-    unsubscribeAllCostumes =
-    unsubscribeUserSettings =
-      null;
-  latestCostumes = [];
-  latestSections = [];
-  latestCharacters = [];
+  for (const unsub of unsubscribers) unsub();
+  unsubscribers = [];
+  for (const kind of Object.keys(store)) store[kind] = { items: [], sections: [], characters: [] };
+  syncCurrentKind();
   latestUsers = [];
   latestAllCostumes = [];
+  latestAllPets = [];
   latestUserSettings = DEFAULT_USER_SETTINGS;
 }
 
@@ -228,20 +252,54 @@ function friendlyAuthError(err) {
   return err.message || "Erro ao entrar.";
 }
 
-// ---------- Tabs ----------
-tabsEl.addEventListener("click", (e) => {
-  const btn = e.target.closest(".tab-btn");
-  if (!btn) return;
-  switchTab(btn.dataset.tab);
+// ---------- Views (menu / trajes / pets / admin) ----------
+const IS_PET = () => currentKind === "pet";
+
+const KIND_TEXT = {
+  costume: {
+    title: "Os meus trajes",
+    add: "+ Adicionar traje",
+    empty: "Ainda não tens trajes adicionados.",
+    singular: "traje",
+    plural: "trajes",
+  },
+  pet: {
+    title: "Os meus pets",
+    add: "+ Adicionar pet",
+    empty: "Ainda não tens pets adicionados.",
+    singular: "pet",
+    plural: "pets",
+  },
+};
+
+function kindText() {
+  return KIND_TEXT[currentKind];
+}
+
+function showView(view) {
+  menuViewEl.hidden = view !== "menu";
+  costumesViewEl.hidden = view !== "list";
+  adminViewEl.hidden = view !== "admin";
+  backMenuBtn.hidden = view === "menu";
+}
+
+function openKind(kind) {
+  currentKind = kind;
+  syncCurrentKind();
+  listTitleEl.textContent = kindText().title;
+  addCostumeBtn.textContent = kindText().add;
+  showView("list");
+  renderCostumes();
+}
+
+menuViewEl.addEventListener("click", (e) => {
+  const tile = e.target.closest(".menu-tile");
+  if (!tile) return;
+  if (tile.dataset.open === "admin") showView("admin");
+  else openKind(tile.dataset.open);
 });
 
-function switchTab(tab) {
-  for (const btn of tabsEl.querySelectorAll(".tab-btn")) {
-    btn.classList.toggle("active", btn.dataset.tab === tab);
-  }
-  costumesViewEl.hidden = tab !== "costumes-view";
-  adminViewEl.hidden = tab !== "admin-view";
-}
+backMenuBtn.addEventListener("click", () => showView("menu"));
 
 // ---------- Notifications ----------
 enableNotifBtn.addEventListener("click", () => {
@@ -417,7 +475,9 @@ settingsForm.addEventListener("submit", async (e) => {
 
 setInterval(() => {
   renderCostumes();
-  checkCostumeNotifications(latestCostumes, computeRemaining, latestUserSettings);
+  for (const kind of Object.keys(store)) {
+    checkCostumeNotifications(store[kind].items, computeRemaining, latestUserSettings, kind);
+  }
 }, 30000);
 
 // ---------- Costumes: render ----------
@@ -433,8 +493,8 @@ function renderCostumes() {
   renderExpiryBanner();
   costumesListEl.innerHTML = "";
 
-  if (latestCostumes.length === 0 && latestSections.length === 0 && latestCharacters.length === 0) {
-    costumesListEl.innerHTML = '<p class="empty-state">Ainda não tens trajes adicionados.</p>';
+  if (latestCostumes.length === 0 && latestSections.length === 0 && latestCharacters.length === 0 && !store.costume.items.length && !store.pet.items.length) {
+    costumesListEl.innerHTML = `<p class="empty-state">${kindText().empty}</p>`;
     return;
   }
 
@@ -443,6 +503,8 @@ function renderCostumes() {
       ...latestCostumes.map((c) => c.character),
       ...latestSections.map((s) => s.character),
       ...latestCharacters.map((c) => c.name),
+      // Personagens que só têm itens no outro sistema também aparecem aqui.
+      ...Object.keys(store).flatMap((kind) => store[kind].items.map((c) => c.character)),
     ]),
   ].sort((a, b) => a.localeCompare(b, "pt"));
 
@@ -472,14 +534,15 @@ function buildCharacterGroup(character) {
   addSectionBtn.addEventListener("click", () => openSectionModal(character));
   headerActions.appendChild(addSectionBtn);
 
-  if (characterDoc && costumeCount === 0 && sectionCount === 0) {
+  const usedInOtherKind = Object.values(store).some((st) => st.items.some((c) => c.character === character));
+  if (characterDoc && costumeCount === 0 && sectionCount === 0 && !usedInOtherKind) {
     const delCharBtn = document.createElement("button");
     delCharBtn.className = "icon-btn small";
     delCharBtn.textContent = "×";
     delCharBtn.title = "Apagar personagem";
     delCharBtn.addEventListener("click", () => {
       if (confirm(`Apagar a personagem "${character}"?`)) {
-        deleteCharacter(characterDoc.id);
+        deleteCharacter(characterDoc.id, currentKind);
       }
     });
     headerActions.appendChild(delCharBtn);
@@ -540,19 +603,20 @@ const pendingMigrations = new Set();
 const pendingDedup = new Set();
 
 function ensureCharacterDefaultSection(character, defaultSections) {
-  if (defaultSections.length > 1 && !pendingDedup.has(character)) {
+  const key = `${currentKind}:${character}`;
+  if (defaultSections.length > 1 && !pendingDedup.has(key)) {
     // Limpa duplicados criados por uma condição de corrida anterior: mantém o mais antigo,
     // move os trajes dos outros para lá, e apaga-os.
-    pendingDedup.add(character);
+    pendingDedup.add(key);
     const [keep, ...extras] = defaultSections;
-    Promise.all(extras.map((extra) => deleteSection(extra.id, keep.id))).finally(() => pendingDedup.delete(character));
+    Promise.all(extras.map((extra) => deleteSection(extra.id, keep.id, currentKind))).finally(() => pendingDedup.delete(key));
     return;
   }
 
-  if (defaultSections.length > 0 || pendingDefaultSections.has(character)) return;
-  pendingDefaultSections.add(character);
-  ensureDefaultSection({ ownerUid: currentUser.uid, character }).finally(() => {
-    pendingDefaultSections.delete(character);
+  if (defaultSections.length > 0 || pendingDefaultSections.has(key)) return;
+  pendingDefaultSections.add(key);
+  ensureDefaultSection({ ownerUid: currentUser.uid, character, kind: currentKind }).finally(() => {
+    pendingDefaultSections.delete(key);
   });
 }
 
@@ -560,10 +624,10 @@ function migrateOrphanedCostumes(character, defaultSection) {
   const orphaned = latestCostumes.filter(
     (c) => c.character === character && (!c.sectionId || !latestSections.some((s) => s.id === c.sectionId))
   );
-  const key = character;
+  const key = `${currentKind}:${character}`;
   if (orphaned.length === 0 || pendingMigrations.has(key)) return;
   pendingMigrations.add(key);
-  Promise.all(orphaned.map((c) => moveCostume(c.id, { character, sectionId: defaultSection.id }))).finally(() =>
+  Promise.all(orphaned.map((c) => moveCostume(c.id, { character, sectionId: defaultSection.id }, currentKind))).finally(() =>
     pendingMigrations.delete(key)
   );
 }
@@ -586,8 +650,8 @@ function buildSectionBlock(section, costumes, character, defaultSection) {
       delBtn.textContent = "×";
       delBtn.title = "Apagar secção";
       delBtn.addEventListener("click", () => {
-        if (confirm(`Apagar a secção "${section.name}"? Os trajes lá dentro passam para "Geral".`)) {
-          deleteSection(section.id, defaultSection ? defaultSection.id : null);
+        if (confirm(`Apagar a secção "${section.name}"? Os ${kindText().plural} lá dentro passam para "Geral".`)) {
+          deleteSection(section.id, defaultSection ? defaultSection.id : null, currentKind);
         }
       });
       header.appendChild(delBtn);
@@ -633,7 +697,7 @@ function buildSectionBlock(section, costumes, character, defaultSection) {
   });
 
   if (costumes.length === 0) {
-    dropzone.innerHTML = '<p class="empty-hint">Arrasta trajes para aqui</p>';
+    dropzone.innerHTML = '<p class="empty-hint">Arrasta para aqui</p>';
   } else {
     for (const costume of costumes) {
       dropzone.appendChild(buildCostumeCard(costume));
@@ -700,9 +764,9 @@ async function handleCostumeDrop(e, dropzoneEl) {
   }
 
   try {
-    await moveCostume(costumeId, { character: targetCharacter, sectionId: targetSectionId });
+    await moveCostume(costumeId, { character: targetCharacter, sectionId: targetSectionId }, currentKind);
   } catch (err) {
-    alert(err.message || "Erro ao mover o traje.");
+    alert(err.message || "Erro ao mover.");
   }
 }
 
@@ -726,7 +790,7 @@ async function handleSectionDrop(e, containerEl, character) {
   existingIds.splice(insertIndex, 0, sectionId);
 
   try {
-    await reorderSections(existingIds.map((id, index) => ({ id, order: index })));
+    await reorderSections(existingIds.map((id, index) => ({ id, order: index })), currentKind);
   } catch (err) {
     alert(err.message || "Erro ao reordenar a secção.");
   }
@@ -756,7 +820,7 @@ function renderExpiryBanner() {
 
   if (urgentCount > 0) {
     urgentBannerEl.hidden = false;
-    urgentBannerEl.innerHTML = `🔴 ${urgentCount} traje${urgentCount > 1 ? "s" : ""} com menos de ${alertDays} dia${alertDays > 1 ? "s" : ""} para expirar!`;
+    urgentBannerEl.innerHTML = `🔴 ${urgentCount} ${urgentCount > 1 ? kindText().plural : kindText().singular} com menos de ${alertDays} dia${alertDays > 1 ? "s" : ""} para expirar!`;
   } else {
     urgentBannerEl.hidden = true;
     urgentBannerEl.innerHTML = "";
@@ -770,10 +834,10 @@ function renderExpiryBanner() {
 
   const parts = [];
   if (expiredCount > 0) {
-    parts.push(`${expiredCount} traje${expiredCount > 1 ? "s" : ""} já expirado${expiredCount > 1 ? "s" : ""}`);
+    parts.push(`${expiredCount} ${expiredCount > 1 ? kindText().plural : kindText().singular} já expirado${expiredCount > 1 ? "s" : ""}`);
   }
   if (soonCount > 0) {
-    parts.push(`${soonCount} traje${soonCount > 1 ? "s" : ""} prestes a expirar (menos de ${warningDays} dias)`);
+    parts.push(`${soonCount} ${soonCount > 1 ? kindText().plural : kindText().singular} prestes a expirar (menos de ${warningDays} dias)`);
   }
 
   expiryBannerEl.hidden = false;
@@ -802,11 +866,12 @@ function buildCostumeCard(costume) {
 
   const main = document.createElement("div");
   main.className = "costume-main";
+  const titleHtml = IS_PET()
+    ? `<span class="pet-emoji">🐾</span><span class="badge pet">Pet</span>`
+    : `<img class="type-icon" src="${COSTUME_ICONS[costume.type] || ""}" alt="${COSTUME_TYPES[costume.type] || costume.type}" />
+      <span class="badge ${costume.type}">${COSTUME_TYPES[costume.type] || costume.type}</span>`;
   main.innerHTML = `
-    <div class="costume-title">
-      <img class="type-icon" src="${COSTUME_ICONS[costume.type] || ""}" alt="${COSTUME_TYPES[costume.type] || costume.type}" />
-      <span class="badge ${costume.type}">${COSTUME_TYPES[costume.type] || costume.type}</span>
-    </div>
+    <div class="costume-title">${titleHtml}</div>
     ${costume.description ? `<div class="costume-desc">${escapeHtml(costume.description)}</div>` : ""}
   `;
 
@@ -816,6 +881,7 @@ function buildCostumeCard(costume) {
   time.innerHTML = `
     <span class="remaining ${remainingClass}">${formatRemaining(remaining)}</span>
     <span class="end-date">termina em ${formatEndDate(remaining.endDate)}</span>
+    ${IS_PET() && costume.durationMs ? `<span class="end-date">duração: ${formatDuration(costume.durationMs)}</span>` : ""}
   `;
 
   const actions = document.createElement("div");
@@ -824,15 +890,15 @@ function buildCostumeCard(costume) {
   const renewBtn = document.createElement("button");
   renewBtn.className = "secondary";
   renewBtn.textContent = "Renovar";
-  renewBtn.addEventListener("click", () => openRenewModal(costume));
+  renewBtn.addEventListener("click", () => (IS_PET() ? renewPetNow(costume) : openRenewModal(costume)));
   actions.appendChild(renewBtn);
 
   const delBtn = document.createElement("button");
   delBtn.className = "icon-btn";
   delBtn.textContent = "Apagar";
   delBtn.addEventListener("click", () => {
-    if (confirm(`Apagar o traje "${costume.description || COSTUME_TYPES[costume.type]}" de ${costume.character}?`)) {
-      deleteCostume(costume.id);
+    if (confirm(`Apagar ${IS_PET() ? "o pet" : "o traje"} "${costume.description || COSTUME_TYPES[costume.type] || "pet"}" de ${costume.character}?`)) {
+      deleteCostume(costume.id, currentKind);
     }
   });
   actions.appendChild(delBtn);
@@ -847,6 +913,38 @@ function buildCostumeCard(costume) {
   card.appendChild(main);
   card.appendChild(right);
   return card;
+}
+
+// Garante que a personagem fica guardada (uma vez só) para trajes e pets.
+async function ensureCharacterSaved(name) {
+  const exists = latestCharacters.some((c) => c.name.toLowerCase() === name.toLowerCase());
+  if (!exists) await addCharacter({ ownerUid: currentUser.uid, name });
+}
+
+function formatDuration(ms) {
+  const totalMinutes = Math.round(ms / 60000);
+  return `${Math.floor(totalMinutes / 1440)}d ${Math.floor((totalMinutes % 1440) / 60)}h ${totalMinutes % 60}m`;
+}
+
+// Pets renovam sempre para a duração fixa com que foram criados — sem formulário.
+async function renewPetNow(pet) {
+  if (!pet.durationMs) {
+    alert("Este pet não tem duração guardada.");
+    return;
+  }
+  if (!confirm(`Renovar o pet "${pet.description || pet.character}" para ${formatDuration(pet.durationMs)}?`)) return;
+  try {
+    await renewPet(pet.id, pet.durationMs);
+    const totalMinutes = Math.round(pet.durationMs / 60000);
+    notifyCostumeRenewed(
+      pet,
+      { daysLeft: Math.floor(totalMinutes / 1440), hoursLeft: Math.floor((totalMinutes % 1440) / 60), minutesLeft: totalMinutes % 60 },
+      latestUserSettings.discordRecipients,
+      "pet"
+    );
+  } catch (err) {
+    alert(err.message || "Erro ao renovar o pet.");
+  }
 }
 
 function escapeHtml(str) {
@@ -879,6 +977,11 @@ function populateCharacterOptions() {
       ...latestCharacters.map((c) => c.name),
       ...latestCostumes.map((c) => c.character),
       ...latestSections.map((s) => s.character),
+      // Sugere também as personagens do outro sistema (trajes <-> pets).
+      ...Object.keys(store).flatMap((kind) => [
+        ...store[kind].characters.map((c) => c.name),
+        ...store[kind].items.map((c) => c.character),
+      ]),
     ]),
   ].sort((a, b) => a.localeCompare(b, "pt"));
   characterListEl.hidden = true;
@@ -929,6 +1032,13 @@ addCostumeBtn.addEventListener("click", () => {
   costumeFormError.textContent = "";
   populateCharacterOptions();
   selectCostumeType("body");
+  const pet = IS_PET();
+  costumeModalTitle.textContent = pet ? "Adicionar pet" : "Adicionar traje";
+  costumeTypeLabel.hidden = pet;
+  costumeTypePicker.hidden = pet;
+  costumeDescLabel.textContent = pet ? "Nome / descrição" : "Descrição";
+  costumeRemainingFieldset.hidden = !pet;
+  costumeTimeLegend.textContent = pet ? "Duração do pet" : "Tempo restante";
   costumeModal.showModal();
 });
 
@@ -950,23 +1060,40 @@ costumeForm.addEventListener("submit", async (e) => {
   }
   const totalMinutes = (Number(daysLeft) || 0) * 24 * 60 + (Number(hoursLeft) || 0) * 60 + (Number(minutesLeft) || 0);
   if (totalMinutes <= 0) {
-    costumeFormError.textContent = "O tempo restante tem de ser maior que zero.";
+    costumeFormError.textContent = IS_PET() ? "A duração tem de ser maior que zero." : "O tempo restante tem de ser maior que zero.";
     return;
   }
 
+  let remainingMs = null;
+  if (IS_PET()) {
+    remainingMs =
+      toDurationMs({
+        daysLeft: document.getElementById("costume-rem-days").value,
+        hoursLeft: document.getElementById("costume-rem-hours").value,
+        minutesLeft: document.getElementById("costume-rem-minutes").value,
+      }) || null;
+    if (remainingMs && remainingMs > totalMinutes * 60 * 1000) {
+      costumeFormError.textContent = "O tempo restante não pode ser maior que a duração.";
+      return;
+    }
+  }
+
   try {
+    await ensureCharacterSaved(character);
     await addCostume({
       ownerUid: currentUser.uid,
       character,
-      type,
+      type: IS_PET() ? null : type,
       description,
       daysLeft,
       hoursLeft,
       minutesLeft,
+      kind: currentKind,
+      remainingMs,
     });
     costumeModal.close();
   } catch (err) {
-    costumeFormError.textContent = err.message || "Erro ao guardar o traje.";
+    costumeFormError.textContent = err.message || "Erro ao guardar.";
   }
 });
 
@@ -1027,7 +1154,7 @@ sectionForm.addEventListener("submit", async (e) => {
     return;
   }
   try {
-    await addSection({ ownerUid: currentUser.uid, character: creatingSectionForCharacter, name });
+    await addSection({ ownerUid: currentUser.uid, character: creatingSectionForCharacter, name, kind: currentKind });
     sectionModal.close();
   } catch (err) {
     sectionFormError.textContent = err.message || "Erro ao criar a secção.";
@@ -1051,7 +1178,10 @@ characterForm.addEventListener("submit", async (e) => {
     characterFormError.textContent = "Indica um nome para a personagem.";
     return;
   }
-  const exists = [...latestCostumes.map((c) => c.character), ...latestCharacters.map((c) => c.name)].some(
+  const exists = [
+    ...Object.values(store).flatMap((st) => st.items.map((c) => c.character)),
+    ...latestCharacters.map((c) => c.name),
+  ].some(
     (existing) => existing.toLowerCase() === name.toLowerCase()
   );
   if (exists) {
@@ -1059,7 +1189,7 @@ characterForm.addEventListener("submit", async (e) => {
     return;
   }
   try {
-    await addCharacter({ ownerUid: currentUser.uid, name });
+    await addCharacter({ ownerUid: currentUser.uid, name, kind: currentKind });
     characterModal.close();
   } catch (err) {
     characterFormError.textContent = err.message || "Erro ao criar a personagem.";
@@ -1077,12 +1207,17 @@ function renderUsers() {
     acc[c.ownerUid] = (acc[c.ownerUid] || 0) + 1;
     return acc;
   }, {});
+  const petCountsByUid = latestAllPets.reduce((acc, p) => {
+    acc[p.ownerUid] = (acc[p.ownerUid] || 0) + 1;
+    return acc;
+  }, {});
 
   const rows = latestUsers
     .slice()
     .sort((a, b) => (a.email || "").localeCompare(b.email || ""))
     .map((u) => {
       const count = countsByUid[u.uid] || 0;
+      const petCount = petCountsByUid[u.uid] || 0;
       const isSelf = currentUser && currentUser.uid === u.uid;
       const statusTag = u.disabled
         ? '<span class="tag disabled">Desativado</span>'
@@ -1098,6 +1233,7 @@ function renderUsers() {
           <td>${escapeHtml(u.displayName || u.email)}</td>
           <td>${escapeHtml(u.email)}</td>
           <td>${count}</td>
+          <td>${petCount}</td>
           <td>${statusTag}</td>
           <td>${deleteBtn}</td>
         </tr>
@@ -1108,7 +1244,7 @@ function renderUsers() {
   usersListEl.innerHTML = `
     <table>
       <thead>
-        <tr><th>Nome</th><th>Email</th><th>Trajes</th><th>Estado</th><th></th></tr>
+        <tr><th>Nome</th><th>Email</th><th>Trajes</th><th>Pets</th><th>Estado</th><th></th></tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
@@ -1117,7 +1253,7 @@ function renderUsers() {
   usersListEl.querySelectorAll('[data-action="disable"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       const uid = btn.dataset.uid;
-      if (confirm("Apagar este utilizador? Os trajes dele serão removidos e deixa de conseguir entrar.")) {
+      if (confirm("Apagar este utilizador? Os trajes e pets dele serão removidos e deixa de conseguir entrar.")) {
         btn.disabled = true;
         try {
           await disableUser(uid);

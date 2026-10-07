@@ -31,10 +31,7 @@
     <header>
       <h1><img src="assets/icons/favicon.png" alt="" class="title-icon" />Metin2 Costumes Tracker</h1>
       <div class="header-actions">
-        <div class="tabs" id="tabs" hidden>
-          <button data-tab="costumes-view" class="tab-btn active">Trajes</button>
-          <button data-tab="admin-view" class="tab-btn">Administração</button>
-        </div>
+        <button id="back-menu-btn" class="secondary" hidden>← Menu</button>
         <button id="open-settings-btn" class="secondary">⚙ Configurações</button>
         <span id="user-email" class="user-email"></span>
         <button id="logout-btn" class="secondary">Sair</button>
@@ -42,18 +39,39 @@
     </header>
 
     <main>
-      <section id="costumes-view" class="view">
+      <section id="menu-view" class="view">
+        <h2 class="menu-title">O que queres gerir?</h2>
+        <div class="menu-tiles">
+          <button class="menu-tile" data-open="costume">
+            <img src="assets/icons/body.png" alt="" class="menu-tile-icon" />
+            <span class="menu-tile-name">Trajes</span>
+            <span class="menu-tile-desc">Corpo, arma e cabeça</span>
+          </button>
+          <button class="menu-tile" data-open="pet">
+            <span class="menu-tile-emoji">🐾</span>
+            <span class="menu-tile-name">Pets</span>
+            <span class="menu-tile-desc">Duração fixa, renova e volta ao início</span>
+          </button>
+          <button class="menu-tile" data-open="admin" id="menu-admin-tile" hidden>
+            <span class="menu-tile-emoji">🛠</span>
+            <span class="menu-tile-name">Administração</span>
+            <span class="menu-tile-desc">Utilizadores da app</span>
+          </button>
+        </div>
+      </section>
+
+      <section id="costumes-view" class="view" hidden>
         <div id="urgent-banner" class="alert-banner alert-banner-danger" hidden></div>
         <div id="expiry-banner" class="alert-banner" hidden></div>
         <div class="section-header">
-          <h2>Os meus trajes</h2>
+          <h2 id="list-title">Os meus trajes</h2>
           <div class="section-header-actions">
             <button id="add-character-btn" class="secondary">+ Personagem</button>
             <button id="add-costume-btn">+ Adicionar traje</button>
           </div>
         </div>
         <p id="notif-hint" class="hint" hidden>
-          Ativa as notificações do browser para seres avisado quando um traje estiver perto de expirar.
+          Ativa as notificações do browser para seres avisado quando algo estiver perto de expirar.
           <button id="enable-notif-btn" type="button">Ativar notificações</button>
         </p>
         <div id="costumes-list" class="costumes-list"></div>
@@ -71,7 +89,7 @@
 
   <dialog id="costume-modal">
     <form id="costume-form" class="card">
-      <h2>Adicionar traje</h2>
+      <h2 id="costume-modal-title">Adicionar traje</h2>
       <label>Personagem
         <div class="combo">
           <input id="costume-character" required autocomplete="off" placeholder="Escolhe uma existente ou escreve uma nova" />
@@ -79,7 +97,7 @@
           <div id="costume-character-list" class="combo-list" hidden></div>
         </div>
       </label>
-      <div class="field-label">Tipo</div>
+      <div class="field-label" id="costume-type-label">Tipo</div>
       <div class="type-picker" id="costume-type-picker">
         <button type="button" class="type-option selected" data-type="body">
           <img src="assets/icons/body.png" alt="Corpo" />
@@ -95,15 +113,24 @@
         </button>
       </div>
       <input type="hidden" id="costume-type" value="body" />
-      <label>Descrição
+      <label><span id="costume-desc-label">Descrição</span>
         <textarea id="costume-description" rows="2" placeholder="Ex: Trate set relampagos."></textarea>
       </label>
       <fieldset>
-        <legend>Tempo restante</legend>
+        <legend id="costume-time-legend">Tempo restante</legend>
         <div class="time-inputs">
           <label>Dias <input type="number" id="costume-days" min="0" value="0" /></label>
           <label>Horas <input type="number" id="costume-hours" min="0" max="23" value="0" /></label>
           <label>Minutos <input type="number" id="costume-minutes" min="0" max="59" value="0" /></label>
+        </div>
+      </fieldset>
+      <fieldset id="costume-remaining-fieldset" hidden>
+        <legend>Tempo restante agora (opcional)</legend>
+        <p class="hint-inline">Preenche só se o pet já começou. Se ficar vazio, começa com a duração completa.</p>
+        <div class="time-inputs">
+          <label>Dias <input type="number" id="costume-rem-days" min="0" placeholder="0" /></label>
+          <label>Horas <input type="number" id="costume-rem-hours" min="0" max="23" placeholder="0" /></label>
+          <label>Minutos <input type="number" id="costume-rem-minutes" min="0" max="59" placeholder="0" /></label>
         </div>
       </fieldset>
       <p id="costume-form-error" class="error"></p>

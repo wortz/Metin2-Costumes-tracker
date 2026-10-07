@@ -27,11 +27,13 @@ export async function createUser({ email, password, displayName }) {
   return uid;
 }
 
-// "Apagar" utilizador = desativar a conta (impede novo login) + apagar os seus trajes.
+// "Apagar" utilizador = desativar a conta (impede novo login) + apagar os seus trajes e pets.
 export async function disableUser(uid) {
-  const costumesSnap = await getDocs(query(collection(db, "costumes"), where("ownerUid", "==", uid)));
   const batch = writeBatch(db);
-  costumesSnap.forEach((docSnap) => batch.delete(docSnap.ref));
+  for (const name of ["costumes", "pets"]) {
+    const snap = await getDocs(query(collection(db, name), where("ownerUid", "==", uid)));
+    snap.forEach((docSnap) => batch.delete(docSnap.ref));
+  }
   batch.update(doc(db, "users", uid), { disabled: true });
   await batch.commit();
 }

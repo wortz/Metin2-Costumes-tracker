@@ -133,14 +133,14 @@ function firestoreBaseUrl(projectId) {
   return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 }
 
-async function listAllCostumes(accessToken, projectId) {
+async function listAllCostumes(accessToken, projectId, collectionId = "costumes") {
   const res = await fetch(`${firestoreBaseUrl(projectId)}:runQuery`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "costumes" }] } }),
+    body: JSON.stringify({ structuredQuery: { from: [{ collectionId }] } }),
   });
   if (!res.ok) {
-    throw new Error(`Falha ao ler trajes: ${await res.text()}`);
+    throw new Error(`Falha ao ler ${collectionId}: ${await res.text()}`);
   }
   const rows = await res.json();
   return rows
@@ -160,7 +160,7 @@ async function getUserSettingsDoc(accessToken, projectId, uid) {
   return fromFirestoreFields(docBody.fields);
 }
 
-async function patchCostume(accessToken, projectId, costumeId, updates) {
+async function patchCostume(accessToken, projectId, costumeId, updates, collectionId = "costumes") {
   const mask = Object.keys(updates)
     .map((key) => `updateMask.fieldPaths=${key}`)
     .join("&");
@@ -168,7 +168,7 @@ async function patchCostume(accessToken, projectId, costumeId, updates) {
   for (const [key, value] of Object.entries(updates)) {
     fields[key] = toFirestoreValue(value);
   }
-  const res = await fetch(`${firestoreBaseUrl(projectId)}/costumes/${costumeId}?${mask}`, {
+  const res = await fetch(`${firestoreBaseUrl(projectId)}/${collectionId}/${costumeId}?${mask}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ fields }),
@@ -198,10 +198,10 @@ function formatEndDate(endAt) {
 // ficarem iguais quer disparem pelo browser quer por este Worker sozinho.
 function discordAlertMessage(costume, stage, remainingMs, endAt) {
   const prefix = stage === "12h" ? "🚨 ALERTA IMPORTANTE" : "⚠️ AVISO";
-  const typeLabel = COSTUME_TYPES[costume.type] || costume.type;
+  const label = costume._kind === "pet" ? "Pet" : `Traje de ${COSTUME_TYPES[costume.type] || costume.type}`;
   const descPart = costume.description ? ` (${costume.description})` : "";
   const hours = Math.floor(remainingMs / (60 * 60 * 1000));
-  return `${prefix}: Traje de ${typeLabel} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatEndDate(endAt)}`;
+  return `${prefix}: ${label} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatEndDate(endAt)}`;
 }
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -222,14 +222,22 @@ function getRecipients(settings) {
   return [];
 }
 
-// Verifica todos os trajes de todos os utilizadores e envia, no máximo, 2 DMs
+// Verifica todos os trajes e pets de todos os utilizadores e envia, no máximo, 2 DMs
 // (a cada destinatário configurado) por traje: uma ao limiar definido pelo
 // utilizador, outra às 12h ou menos. Devolve um resumo (usado pela rota
 // /debug-sweep para diagnóstico).
 async function runNotificationSweep(env) {
   const accessToken = await getGoogleAccessToken(env);
   const projectId = env.FIREBASE_PROJECT_ID;
-  const costumes = await listAllCostumes(accessToken, projectId);
+  // Trajes e pets seguem exatamente as mesmas regras de aviso.
+  const [costumeDocs, petDocs] = await Promise.all([
+    listAllCostumes(accessToken, projectId, "costumes"),
+    listAllCostumes(accessToken, projectId, "pets"),
+  ]);
+  const costumes = [
+    ...costumeDocs.map((c) => ({ ...c, _kind: "costume" })),
+    ...petDocs.map((p) => ({ ...p, _kind: "pet" })),
+  ];
   const settingsCache = new Map();
   const summary = { totalCostumes: costumes.length, sent: [], skipped: [], errors: [] };
 
@@ -304,7 +312,7 @@ async function runNotificationSweep(env) {
 
     if (Object.keys(updates).length > 0) {
       try {
-        await patchCostume(accessToken, projectId, costume.id, updates);
+        await patchCostume(accessToken, projectId, costume.id, updates, costume._kind === "pet" ? "pets" : "costumes");
       } catch (err) {
         summary.errors.push({ id: costume.id, stage: "patch", error: err.message });
       }

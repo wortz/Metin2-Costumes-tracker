@@ -573,6 +573,7 @@ button.small {
 .badge.body { background: #3a4a7c; }
 .badge.weapon { background: #7c3a3a; }
 .badge.head { background: #3a7c5c; }
+.badge.pet { background: #7c5a3a; }
 
 .costume-desc {
   color: var(--text-muted);
@@ -779,4 +780,67 @@ fieldset legend {
   .costume-time {
     text-align: left;
   }
+}
+
+/* Menu inicial */
+.menu-title {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.menu-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.menu-tile {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.menu-tile[hidden] {
+  display: none;
+}
+
+.menu-tile:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+}
+
+.menu-tile-icon {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.menu-tile-emoji {
+  font-size: 48px;
+  line-height: 56px;
+}
+
+.menu-tile-name {
+  font-size: 18px;
+}
+
+.menu-tile-desc {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+#back-menu-btn[hidden] {
+  display: none;
+}
+
+.pet-emoji {
+  font-size: 28px;
+  line-height: 1;
 }

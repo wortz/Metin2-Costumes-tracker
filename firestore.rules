@@ -30,6 +30,22 @@ service cloud.firestore {
     match /costumes/{costumeId} {
       allow read: if isActive() && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isActive() && resource.data.ownerUid == request.auth.uid;
+      // O admin também apaga (ao "apagar" um utilizador, os trajes dele são removidos).
+      allow delete: if isActive() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // Pets: mesma estrutura dos trajes (itens e secções próprios; as personagens são partilhadas com os trajes).
+    match /pets/{petId} {
+      allow read: if isActive() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isActive() && resource.data.ownerUid == request.auth.uid;
+      allow delete: if isActive() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /petSections/{sectionId} {
+      allow read: if isActive() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isActive() && resource.data.ownerUid == request.auth.uid;
     }
 

@@ -9,10 +9,11 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { db } from "./firebase-init.js";
+import { collectionsFor } from "./kinds.js";
 
-// Cria uma personagem vazia (sem trajes ainda), para poderes organizar antes de adicionar trajes.
-export function addCharacter({ ownerUid, name }) {
-  return addDoc(collection(db, "characters"), {
+// Cria uma personagem vazia (sem trajes/pets ainda), para poderes organizar antes de adicionar.
+export function addCharacter({ ownerUid, name, kind = "costume" }) {
+  return addDoc(collection(db, collectionsFor(kind).characters), {
     ownerUid,
     name: name.trim(),
     order: Date.now(),
@@ -20,12 +21,12 @@ export function addCharacter({ ownerUid, name }) {
   });
 }
 
-export function deleteCharacter(characterId) {
-  return deleteDoc(doc(db, "characters", characterId));
+export function deleteCharacter(characterId, kind = "costume") {
+  return deleteDoc(doc(db, collectionsFor(kind).characters, characterId));
 }
 
-export function subscribeToOwnCharacters(ownerUid, onChange) {
-  const q = query(collection(db, "characters"), where("ownerUid", "==", ownerUid));
+export function subscribeToOwnCharacters(ownerUid, onChange, kind = "costume") {
+  const q = query(collection(db, collectionsFor(kind).characters), where("ownerUid", "==", ownerUid));
   return onSnapshot(q, (snap) => {
     const characters = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     onChange(characters);

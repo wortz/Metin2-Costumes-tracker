@@ -64,8 +64,14 @@ export function testDiscordDM(userId) {
   return sendDiscordDM(userId, "✅ Teste do Metin2 Costumes Tracker — a DM está a funcionar!");
 }
 
-function alertBody(costume, remaining) {
-  return `${costume.character} — ${costume.description || "traje"} termina em ${remaining.days}d ${remaining.hours}h ${remaining.minutes}m`;
+// "Traje de Corpo" / "Pet" — o começo da frase nas mensagens.
+function itemLabel(item, kind) {
+  if (kind === "pet") return "Pet";
+  return `Traje de ${COSTUME_TYPES[item.type] || item.type}`;
+}
+
+function alertBody(costume, remaining, kind) {
+  return `${costume.character} — ${costume.description || (kind === "pet" ? "pet" : "traje")} termina em ${remaining.days}d ${remaining.hours}h ${remaining.minutes}m`;
 }
 
 // Formata a data/hora fixa em hora de Portugal (Europe/Lisbon), independente
@@ -80,28 +86,26 @@ function formatDiscordEndDate(date) {
 // Mensagem para o Discord, no formato pedido: "AVISO: Traje de X do personagem
 // Y (descrição) a terminar em Z horas - DD/MM, HH:MM PT" (ou "ALERTA
 // IMPORTANTE" nas 12h).
-function discordAlertMessage(costume, stage, remaining) {
+function discordAlertMessage(costume, stage, remaining, kind) {
   const prefix = stage === "12h" ? "🚨 ALERTA IMPORTANTE" : "⚠️ AVISO";
-  const typeLabel = COSTUME_TYPES[costume.type] || costume.type;
   const descPart = costume.description ? ` (${costume.description})` : "";
   const hours = Math.floor(remaining.totalMs / (60 * 60 * 1000));
-  return `${prefix}: Traje de ${typeLabel} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatDiscordEndDate(remaining.endDate)}`;
+  return `${prefix}: ${itemLabel(costume, kind)} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatDiscordEndDate(remaining.endDate)}`;
 }
 
 // Avisa todos os destinatários do Discord de que um traje foi renovado, com o
 // novo tempo de duração e a nova data de fim. Só avisa se o traje já tinha
 // disparado algum aviso no Discord (ou seja, se as pessoas já sabiam que
 // estava a acabar) — senão não há nada a "resolver" e não manda nada.
-export function notifyCostumeRenewed(costume, { daysLeft, hoursLeft, minutesLeft }, recipients) {
+export function notifyCostumeRenewed(costume, { daysLeft, hoursLeft, minutesLeft }, recipients, kind = "costume") {
   if (!recipients || recipients.length === 0 || !auth.currentUser) return;
   if (!costume.notifiedThreshold && !costume.notified12h) return;
   const days = Number(daysLeft) || 0;
   const hours = Number(hoursLeft) || 0;
   const minutes = Number(minutesLeft) || 0;
   const endDate = new Date(Date.now() + ((days * 24 + hours) * 60 + minutes) * 60 * 1000);
-  const typeLabel = COSTUME_TYPES[costume.type] || costume.type;
   const descPart = costume.description ? ` (${costume.description})` : "";
-  const message = `✅ Traje de ${typeLabel} do personagem ${costume.character}${descPart} renovado - novo tempo: ${days}d ${hours}h ${minutes}m - ${formatDiscordEndDate(endDate)}`;
+  const message = `✅ ${itemLabel(costume, kind)} do personagem ${costume.character}${descPart} renovado - novo tempo: ${days}d ${hours}h ${minutes}m - ${formatDiscordEndDate(endDate)}`;
   for (const recipient of recipients) sendDiscordDM(recipient.id, message);
 }
 
@@ -109,7 +113,7 @@ export function notifyCostumeRenewed(costume, { daysLeft, hoursLeft, minutesLeft
 // repete a cada hora cheia enquanto a preferência "repetir" estiver ligada, ou
 // dispara só uma vez caso contrário. Estado guardado no browser (não precisa
 // de sobreviver ao site fechado, ao contrário das DMs).
-function checkBrowserNotifications(costumes, computeRemaining, thresholdMs) {
+function checkBrowserNotifications(costumes, computeRemaining, thresholdMs, kind) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const repeatHourly = getNotifyRepeatSetting();
   const state = getBrowserNotifiedState();
@@ -132,7 +136,10 @@ function checkBrowserNotifications(costumes, computeRemaining, thresholdMs) {
     const shouldNotify = lastNotifiedHour === undefined || (repeatHourly && hoursRemaining < lastNotifiedHour);
 
     if (shouldNotify) {
-      new Notification("Traje prestes a expirar", { body: alertBody(costume, remaining), tag: costume.id });
+      new Notification(kind === "pet" ? "Pet prestes a expirar" : "Traje prestes a expirar", {
+        body: alertBody(costume, remaining, kind),
+        tag: costume.id,
+      });
       state[costume.id] = hoursRemaining;
       changed = true;
     }
@@ -147,7 +154,7 @@ function checkBrowserNotifications(costumes, computeRemaining, thresholdMs) {
 // "ALERTA IMPORTANTE"), não os dois de uma vez. Manda a todos os destinatários
 // configurados. Estado guardado no próprio traje (Firestore), partilhado com
 // o Worker que corre em fundo.
-function checkDiscordDMs(costumes, computeRemaining, thresholdMs, recipients) {
+function checkDiscordDMs(costumes, computeRemaining, thresholdMs, recipients, kind) {
   if (!recipients || recipients.length === 0 || !auth.currentUser) return;
 
   for (const costume of costumes) {
@@ -155,20 +162,20 @@ function checkDiscordDMs(costumes, computeRemaining, thresholdMs, recipients) {
     if (remaining.expired) continue;
 
     if (remaining.totalMs <= TWELVE_HOURS_MS && !costume.notified12h) {
-      const message = discordAlertMessage(costume, "12h", remaining);
+      const message = discordAlertMessage(costume, "12h", remaining, kind);
       for (const recipient of recipients) sendDiscordDM(recipient.id, message);
-      markCostumeNotified(costume.id, "12h");
-      if (!costume.notifiedThreshold) markCostumeNotified(costume.id, "threshold");
+      markCostumeNotified(costume.id, "12h", kind);
+      if (!costume.notifiedThreshold) markCostumeNotified(costume.id, "threshold", kind);
     } else if (remaining.totalMs <= thresholdMs && !costume.notifiedThreshold) {
-      const message = discordAlertMessage(costume, "threshold", remaining);
+      const message = discordAlertMessage(costume, "threshold", remaining, kind);
       for (const recipient of recipients) sendDiscordDM(recipient.id, message);
-      markCostumeNotified(costume.id, "threshold");
+      markCostumeNotified(costume.id, "threshold", kind);
     }
   }
 }
 
-export function checkCostumeNotifications(costumes, computeRemaining, userSettings) {
+export function checkCostumeNotifications(costumes, computeRemaining, userSettings, kind = "costume") {
   const thresholdMs = (userSettings?.notifyThresholdDays || 1) * 24 * 60 * 60 * 1000;
-  checkBrowserNotifications(costumes, computeRemaining, thresholdMs);
-  checkDiscordDMs(costumes, computeRemaining, thresholdMs, userSettings?.discordRecipients);
+  checkBrowserNotifications(costumes, computeRemaining, thresholdMs, kind);
+  checkDiscordDMs(costumes, computeRemaining, thresholdMs, userSettings?.discordRecipients, kind);
 }
