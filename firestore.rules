@@ -61,6 +61,11 @@ service cloud.firestore {
       allow update, delete: if isActive() && resource.data.ownerUid == request.auth.uid;
     }
 
+    // Registo de Meley/Balathor (um por conta) — só o próprio dono lê/escreve.
+    match /registrations/{uid} {
+      allow read, write: if isActive() && request.auth.uid == uid;
+    }
+
     // Preferências de notificação (Discord User ID, limiar de aviso) — só o
     // próprio dono lê/escreve. O Cloudflare Worker lê isto com credenciais de
     // serviço (Admin), que ignoram estas regras por completo.

@@ -844,3 +844,68 @@ fieldset legend {
   font-size: 28px;
   line-height: 1;
 }
+
+/* Registos Meley / Balathor */
+.menu-subtitle {
+  margin: 28px 0 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.registry-boxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.registry-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.registry-box h4 {
+  margin: 0 0 4px;
+}
+
+.registry-line {
+  margin: 0;
+  font-size: 14px;
+}
+
+.registry-line.muted {
+  color: var(--text-muted);
+}
+
+.registry-line.ready {
+  color: var(--success);
+}
+
+.registry-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.registry-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.registry-head h4 {
+  margin: 0;
+}
+
+.registry-icon {
+  width: 96px;
+  height: 64px;
+  object-fit: contain;
+}

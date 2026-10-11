@@ -9,6 +9,7 @@
 //
 // Variáveis a configurar no Worker:
 //   DISCORD_BOT_TOKEN      (secret) -> o token do bot do Discord
+//   DISCORD_REGISTRY_BOT_TOKEN (secret) -> token do 2.º bot (avisos de registo Meley/Balathor)
 //   FIREBASE_PROJECT_ID    (var)    -> o project id do Firebase (ex: "costumes-tracker")
 //   FIREBASE_CLIENT_EMAIL  (secret) -> "client_email" da chave de conta de serviço
 //   FIREBASE_PRIVATE_KEY   (secret) -> "private_key" da chave de conta de serviço
@@ -31,10 +32,16 @@ function json(status, data) {
 }
 
 // ---------- Envio de DMs no Discord (partilhado pelo fetch e pelo scheduled) ----------
-async function sendDiscordDM(env, discordUserId, message) {
+async function sendDiscordDM(env, discordUserId, message, botKey = "default") {
+  // Os registos de Meley/Balathor usam um segundo bot, para as mensagens
+  // aparecerem separadas das de expiração de trajes/pets.
+  const token = botKey === "registry" ? env.DISCORD_REGISTRY_BOT_TOKEN : env.DISCORD_BOT_TOKEN;
+  if (!token) {
+    throw new Error(botKey === "registry" ? "Bot de registos não configurado (DISCORD_REGISTRY_BOT_TOKEN)." : "Bot não configurado.");
+  }
   const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
     method: "POST",
-    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ recipient_id: discordUserId }),
   });
   if (!dmRes.ok) {
@@ -44,7 +51,7 @@ async function sendDiscordDM(env, discordUserId, message) {
 
   const msgRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
     method: "POST",
-    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ content: message }),
   });
   if (!msgRes.ok) {
@@ -353,7 +360,7 @@ export default {
     }
 
     try {
-      await sendDiscordDM(env, body.userId, body.message);
+      await sendDiscordDM(env, body.userId, body.message, body.bot === "registry" ? "registry" : "default");
     } catch (err) {
       return json(502, { error: err.message });
     }

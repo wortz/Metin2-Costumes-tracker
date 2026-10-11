@@ -35,6 +35,13 @@ import {
   getNotifyRepeatSetting,
   setNotifyRepeatSetting,
 } from "./notifications.js";
+import {
+  INSTANCES,
+  REGISTRATION_COOLDOWN_MS,
+  subscribeToRegistration,
+  saveRegistration,
+} from "./registrations.js";
+import { notifyRegistration } from "./notifications.js";
 import { DISCORD_OAUTH_CLIENT_ID } from "./settings.js";
 import { DEFAULT_USER_SETTINGS, getUserSettings, saveUserSettings, subscribeToUserSettings } from "./user-settings.js";
 
@@ -133,6 +140,8 @@ let latestCharacters = [];
 let latestUsers = [];
 let latestAllCostumes = [];
 let latestAllPets = [];
+let latestRegistration = { meley: null, balathor: null };
+const registryStatus = {};
 let latestUserSettings = DEFAULT_USER_SETTINGS;
 let renewingCostume = null;
 let creatingSectionForCharacter = null;
@@ -188,6 +197,13 @@ onAuthChange((user, err) => {
   );
 
   unsubscribers.push(
+    subscribeToRegistration(user.uid, (registration) => {
+      latestRegistration = registration;
+      renderRegistry();
+    })
+  );
+
+  unsubscribers.push(
     subscribeToUserSettings(user.uid, (settings) => {
       latestUserSettings = settings;
       renderCostumes();
@@ -238,6 +254,7 @@ function cleanupSubscriptions() {
   latestUsers = [];
   latestAllCostumes = [];
   latestAllPets = [];
+  latestRegistration = { meley: null, balathor: null };
   latestUserSettings = DEFAULT_USER_SETTINGS;
 }
 
@@ -300,6 +317,91 @@ menuViewEl.addEventListener("click", (e) => {
 });
 
 backMenuBtn.addEventListener("click", () => showView("menu"));
+
+// ---------- Registos (Meley / Balathor) ----------
+const INSTANCE_ICONS = { meley: "assets/icons/meley.png", balathor: "assets/icons/balathor.png" };
+const registryBoxesEl = document.getElementById("registry-boxes");
+
+function formatRegistryTime(date) {
+  return date.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function renderRegistry() {
+  registryBoxesEl.innerHTML = "";
+  for (const [key, label] of Object.entries(INSTANCES)) {
+    const registeredAt = latestRegistration[key];
+    const box = document.createElement("div");
+    box.className = "registry-box";
+
+    let info = '<p class="registry-line muted">Sem registo</p>';
+    if (registeredAt) {
+      const nextAt = new Date(registeredAt.getTime() + REGISTRATION_COOLDOWN_MS);
+      const ready = Date.now() >= nextAt.getTime();
+      info = `
+        <p class="registry-line">Registo feito: <strong>${formatRegistryTime(registeredAt)}</strong></p>
+        <p class="registry-line ${ready ? "ready" : "muted"}">Próximo registo: <strong>${formatRegistryTime(nextAt)}</strong>${ready ? " (já podes)" : ""}</p>`;
+    }
+    // Imagem do boss (assets/icons/meley.png, balathor.png); se faltar, esconde-se sozinha.
+    box.innerHTML = `<div class="registry-head"><img class="registry-icon" src="${INSTANCE_ICONS[key]}" alt="" onerror="this.style.display='none'" /><h4>Registo de ${label}</h4></div>${info}`;
+
+    const btn = document.createElement("button");
+    btn.textContent = "Registar";
+    btn.addEventListener("click", () => registerInstance(key));
+    box.appendChild(btn);
+
+    const status = document.createElement("p");
+    status.className = "registry-status";
+    status.textContent = registryStatus[key] || "";
+    box.appendChild(status);
+
+    registryBoxesEl.appendChild(box);
+  }
+}
+
+// Só em localhost: simula um registo no ecrã (sem guardar no Firebase) para testar
+// o aspeto. Na consola: demoRegistration("meley", 30) -> registo feito há 30 min.
+if (["localhost", "127.0.0.1"].includes(location.hostname)) {
+  window.demoRegistration = (instance = "meley", minutesAgo = 30) => {
+    latestRegistration = { ...latestRegistration, [instance]: new Date(Date.now() - minutesAgo * 60000) };
+    renderRegistry();
+  };
+}
+
+async function registerInstance(key) {
+  const label = INSTANCES[key];
+  const last = latestRegistration[key];
+  if (last) {
+    const nextAt = new Date(last.getTime() + REGISTRATION_COOLDOWN_MS);
+    if (Date.now() < nextAt.getTime()) {
+      if (!confirm(`Já tens um registo de ${label} (feito ${formatRegistryTime(last)}).
+Só podes voltar a registar a partir de ${formatRegistryTime(nextAt)}.
+Queres registar mesmo assim?`)) return;
+    }
+  }
+
+  registryStatus.meley = registryStatus.balathor = "";
+  try {
+    await saveRegistration(currentUser.uid, key);
+  } catch (err) {
+    registryStatus[key] = err.message || "Erro ao guardar o registo.";
+    renderRegistry();
+    return;
+  }
+
+  const now = new Date();
+  const nextAt = new Date(now.getTime() + REGISTRATION_COOLDOWN_MS);
+  const recipients = latestUserSettings.discordRecipients;
+  if (recipients.length === 0) {
+    registryStatus[key] = "Registado. (Sem destinatários Discord configurados.)";
+  } else {
+    registryStatus[key] = "Registado. A enviar mensagem...";
+    renderRegistry();
+    const results = await notifyRegistration(label, now, nextAt, recipients, currentUser.displayName);
+    const failed = results.filter((r) => !r.ok);
+    registryStatus[key] = failed.length === 0 ? "Registado e enviado no Discord." : `Registado, mas o Discord falhou: ${failed.map((f) => f.error).join(", ")}`;
+  }
+  renderRegistry();
+}
 
 // ---------- Notifications ----------
 enableNotifBtn.addEventListener("click", () => {
@@ -441,7 +543,7 @@ settingsDmTestBtn.addEventListener("click", async () => {
   const failed = results.filter((r) => !r.ok);
   settingsDmTestResult.textContent =
     failed.length === 0
-      ? `Enviado a ${results.length} destinatário${results.length > 1 ? "s" : ""}! Confirma no Discord.`
+      ? `Enviado a ${results.length} destinatário${results.length > 1 ? "s" : ""} pelos dois bots! Confirma no Discord.`
       : `${results.length - failed.length}/${results.length} enviados. Falhas: ${failed.map((f) => f.error).join(", ")}`;
   settingsDmTestResult.className = failed.length === 0 ? "hint-inline success" : "hint-inline error";
   settingsDmTestBtn.disabled = false;
@@ -475,6 +577,7 @@ settingsForm.addEventListener("submit", async (e) => {
 
 setInterval(() => {
   renderCostumes();
+  renderRegistry();
   for (const kind of Object.keys(store)) {
     checkCostumeNotifications(store[kind].items, computeRemaining, latestUserSettings, kind);
   }

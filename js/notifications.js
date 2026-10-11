@@ -39,7 +39,7 @@ export function requestNotificationPermission() {
 // não há nenhum segredo para partilhar/colar, o Worker confia em quem já está
 // autenticado nesta app. Devolve { ok, error } em vez de lançar, para a UI
 // poder mostrar o motivo da falha.
-export async function sendDiscordDM(userId, message) {
+export async function sendDiscordDM(userId, message, bot = "default") {
   if (!auth.currentUser) {
     return { ok: false, error: "Não estás autenticado." };
   }
@@ -48,7 +48,7 @@ export async function sendDiscordDM(userId, message) {
     const res = await fetch(DISCORD_DM_WORKER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken, userId, message }),
+      body: JSON.stringify({ idToken, userId, message, bot }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -60,8 +60,17 @@ export async function sendDiscordDM(userId, message) {
   }
 }
 
-export function testDiscordDM(userId) {
-  return sendDiscordDM(userId, "✅ Teste do Metin2 Costumes Tracker — a DM está a funcionar!");
+// Envia a mensagem de teste pelos dois bots (trajes/pets e registos). Devolve
+// { ok, error }, com o erro a indicar qual dos bots falhou.
+export async function testDiscordDM(userId) {
+  const [costumes, registry] = await Promise.all([
+    sendDiscordDM(userId, "✅ Teste do Metin2 Costumes Tracker (bot dos trajes e pets) — a DM está a funcionar!"),
+    sendDiscordDM(userId, "✅ Teste do Metin2 Costumes Tracker (bot dos registos) — a DM está a funcionar!", "registry"),
+  ]);
+  const errors = [];
+  if (!costumes.ok) errors.push(`bot dos trajes: ${costumes.error}`);
+  if (!registry.ok) errors.push(`bot dos registos: ${registry.error}`);
+  return errors.length === 0 ? { ok: true } : { ok: false, error: errors.join(" | ") };
 }
 
 // "Traje de Corpo" / "Pet" — o começo da frase nas mensagens.
@@ -77,7 +86,7 @@ function alertBody(costume, remaining, kind) {
 // Formata a data/hora fixa em hora de Portugal (Europe/Lisbon), independente
 // do fuso horário de quem/onde corre o código (browser do utilizador, ou o
 // Worker que corre em UTC) — ajusta-se sozinho ao horário de inverno/verão.
-function formatDiscordEndDate(date) {
+export function formatDiscordEndDate(date) {
   const datePart = date.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Lisbon" });
   const timePart = date.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Lisbon" });
   return `${datePart}, ${timePart} PT`;
@@ -91,6 +100,14 @@ function discordAlertMessage(costume, stage, remaining, kind) {
   const descPart = costume.description ? ` (${costume.description})` : "";
   const hours = Math.floor(remaining.totalMs / (60 * 60 * 1000));
   return `${prefix}: ${itemLabel(costume, kind)} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatDiscordEndDate(remaining.endDate)}`;
+}
+
+// Avisa todos os destinatários do Discord de um registo de Meley/Balathor,
+// através do segundo bot. Devolve os resultados de cada envio.
+export function notifyRegistration(instanceLabel, registeredAt, nextAt, recipients, who) {
+  if (!recipients || recipients.length === 0) return Promise.resolve([]);
+  const message = `📝 Registo de ${instanceLabel} feito${who ? ` por ${who}` : ""} - ${formatDiscordEndDate(registeredAt)} - próximo registo possível a partir de ${formatDiscordEndDate(nextAt)}`;
+  return Promise.all(recipients.map((r) => sendDiscordDM(r.id, message, "registry")));
 }
 
 // Avisa todos os destinatários do Discord de que um traje foi renovado, com o
