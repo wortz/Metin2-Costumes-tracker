@@ -1,4 +1,4 @@
-# Metin2 Costumes Tracker
+# Metin2 Timers Tracker
 
 WebApp para acompanhar o tempo restante dos trajes (corpo, arma e cabeça) de cada
 personagem, com aviso quando um traje está prestes a expirar. Cada utilizador só

@@ -64,8 +64,8 @@ export async function sendDiscordDM(userId, message, bot = "default") {
 // { ok, error }, com o erro a indicar qual dos bots falhou.
 export async function testDiscordDM(userId) {
   const [costumes, registry] = await Promise.all([
-    sendDiscordDM(userId, "✅ Teste do Metin2 Costumes Tracker (bot dos trajes e pets) — a DM está a funcionar!"),
-    sendDiscordDM(userId, "✅ Teste do Metin2 Costumes Tracker (bot dos registos) — a DM está a funcionar!", "registry"),
+    sendDiscordDM(userId, "✅ Teste do Metin2 Timers Tracker (bot dos trajes e pets) — a DM está a funcionar!"),
+    sendDiscordDM(userId, "✅ Teste do Metin2 Timers Tracker (bot dos registos) — a DM está a funcionar!", "registry"),
   ]);
   const errors = [];
   if (!costumes.ok) errors.push(`bot dos trajes: ${costumes.error}`);
