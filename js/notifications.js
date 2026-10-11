@@ -104,9 +104,10 @@ function discordAlertMessage(costume, stage, remaining, kind) {
 
 // Avisa todos os destinatários do Discord de um registo de Meley/Balathor,
 // através do segundo bot. Devolve os resultados de cada envio.
-export function notifyRegistration(instanceLabel, registeredAt, nextAt, recipients, who) {
+export function notifyRegistration(instanceLabel, registeredAt, nextAt, recipients, channel) {
   if (!recipients || recipients.length === 0) return Promise.resolve([]);
-  const message = `📝 Registo de ${instanceLabel} feito${who ? ` por ${who}` : ""} - ${formatDiscordEndDate(registeredAt)} - próximo registo possível a partir de ${formatDiscordEndDate(nextAt)}`;
+  const message = `📝 Registo de ${instanceLabel} feito - CH ${channel}.
+Próximo registo possível a ${formatDiscordEndDate(nextAt)}`;
   return Promise.all(recipients.map((r) => sendDiscordDM(r.id, message, "registry")));
 }
 

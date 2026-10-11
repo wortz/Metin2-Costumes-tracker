@@ -329,6 +329,89 @@ async function runNotificationSweep(env) {
   return summary;
 }
 
+// ---------- Limpeza diária das mensagens dos bots ----------
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function discordHeaders(token) {
+  return { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
+}
+
+// Pedido ao Discord que repete uma vez se bater no limite de pedidos (429).
+async function discordFetch(url, options) {
+  let res = await fetch(url, options);
+  if (res.status === 429) {
+    const data = await res.json().catch(() => ({}));
+    await new Promise((resolve) => setTimeout(resolve, Math.ceil((data.retry_after || 1) * 1000) + 100));
+    res = await fetch(url, options);
+  }
+  return res;
+}
+
+// Apaga, na DM de cada destinatário, as mensagens enviadas por ESTE bot há mais
+// de 24 horas (as mensagens de outras pessoas nunca são tocadas).
+async function deleteOldBotMessages(token, recipientIds) {
+  const meRes = await discordFetch("https://discord.com/api/v10/users/@me", { headers: discordHeaders(token) });
+  if (!meRes.ok) throw new Error(`Falha ao identificar o bot: ${await meRes.text()}`);
+  const botId = (await meRes.json()).id;
+  let deleted = 0;
+
+  for (const userId of recipientIds) {
+    const chRes = await discordFetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: discordHeaders(token),
+      body: JSON.stringify({ recipient_id: userId }),
+    });
+    if (!chRes.ok) continue;
+    const channel = await chRes.json();
+
+    let before = null;
+    for (let page = 0; page < 5; page++) {
+      const url = `https://discord.com/api/v10/channels/${channel.id}/messages?limit=100${before ? `&before=${before}` : ""}`;
+      const msgRes = await discordFetch(url, { headers: discordHeaders(token) });
+      if (!msgRes.ok) break;
+      const messages = await msgRes.json();
+      if (messages.length === 0) break;
+
+      for (const msg of messages) {
+        if (msg.author?.id !== botId) continue;
+        if (Date.now() - new Date(msg.timestamp).getTime() < ONE_DAY_MS) continue;
+        const delRes = await discordFetch(`https://discord.com/api/v10/channels/${channel.id}/messages/${msg.id}`, {
+          method: "DELETE",
+          headers: discordHeaders(token),
+        });
+        if (delRes.ok) deleted++;
+      }
+      before = messages[messages.length - 1].id;
+      if (messages.length < 100) break;
+    }
+  }
+  return deleted;
+}
+
+async function cleanupBotMessages(env) {
+  const accessToken = await getGoogleAccessToken(env);
+  const settingsDocs = await listAllCostumes(accessToken, env.FIREBASE_PROJECT_ID, "userSettings");
+  const recipientIds = [...new Set(settingsDocs.flatMap((doc) => getRecipients(doc).map((r) => r.id)))];
+  if (recipientIds.length === 0) return;
+
+  for (const token of [env.DISCORD_BOT_TOKEN, env.DISCORD_REGISTRY_BOT_TOKEN]) {
+    if (!token) continue;
+    try {
+      const deleted = await deleteOldBotMessages(token, recipientIds);
+      console.log(`Limpeza: ${deleted} mensagens apagadas.`);
+    } catch (err) {
+      console.error("Falha na limpeza de mensagens:", err);
+    }
+  }
+}
+
+// O cron corre de hora a hora (em UTC); a limpeza só corre na execução que
+// corresponde à meia-noite em Portugal (ajusta-se sozinho a inverno/verão).
+function isLisbonMidnight(date) {
+  const hour = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Lisbon" }).format(date);
+  return Number(hour) === 0;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -370,5 +453,8 @@ export default {
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runNotificationSweep(env).catch((err) => console.error("Falha na verificação agendada:", err)));
+    if (isLisbonMidnight(new Date(event.scheduledTime))) {
+      ctx.waitUntil(cleanupBotMessages(env).catch((err) => console.error("Falha na limpeza diária:", err)));
+    }
   },
 };

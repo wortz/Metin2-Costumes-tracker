@@ -38,6 +38,7 @@ import {
 import {
   INSTANCES,
   REGISTRATION_COOLDOWN_MS,
+  CHANNELS,
   subscribeToRegistration,
   saveRegistration,
 } from "./registrations.js";
@@ -329,30 +330,40 @@ function formatRegistryTime(date) {
 function renderRegistry() {
   registryBoxesEl.innerHTML = "";
   for (const [key, label] of Object.entries(INSTANCES)) {
-    const registeredAt = latestRegistration[key];
+    const registration = latestRegistration[key];
+    const registeredAt = registration ? registration.at : null;
     const box = document.createElement("div");
     box.className = "registry-box";
 
-    let info = '<p class="registry-line muted">Sem registo</p>';
+    // Os dois cartões têm sempre as mesmas duas linhas, para ficarem com o mesmo tamanho.
+    let info = `
+      <p class="registry-line muted">Último registo: <strong>—</strong></p>
+      <p class="registry-line ready">Próximo registo: <strong>já podes</strong></p>`;
     if (registeredAt) {
       const nextAt = new Date(registeredAt.getTime() + REGISTRATION_COOLDOWN_MS);
       const ready = Date.now() >= nextAt.getTime();
       info = `
-        <p class="registry-line">Registo feito: <strong>${formatRegistryTime(registeredAt)}</strong></p>
-        <p class="registry-line ${ready ? "ready" : "muted"}">Próximo registo: <strong>${formatRegistryTime(nextAt)}</strong>${ready ? " (já podes)" : ""}</p>`;
+        <p class="registry-line">Último registo: <strong>${registration.channel ? `Canal ${registration.channel}` : "—"}</strong></p>
+        <p class="registry-line ${ready ? "ready" : "muted"}">Próximo registo: <strong>${formatRegistryTime(nextAt)}</strong></p>${ready ? '<p class="registry-line ready"><strong>Já podes</strong></p>' : ""}`;
     }
     // Imagem do boss (assets/icons/meley.png, balathor.png); se faltar, esconde-se sozinha.
-    box.innerHTML = `<div class="registry-head"><img class="registry-icon" src="${INSTANCE_ICONS[key]}" alt="" onerror="this.style.display='none'" /><h4>Registo de ${label}</h4></div>${info}`;
+    box.innerHTML = `
+      <div class="registry-image"><img src="${INSTANCE_ICONS[key]}" alt="${label}" onerror="this.style.display='none'" /></div>
+      <div class="registry-body">
+        <h4>Registo de ${label}</h4>
+        ${info}
+      </div>`;
 
+    const body = box.querySelector(".registry-body");
     const btn = document.createElement("button");
     btn.textContent = "Registar";
     btn.addEventListener("click", () => registerInstance(key));
-    box.appendChild(btn);
+    body.appendChild(btn);
 
     const status = document.createElement("p");
     status.className = "registry-status";
     status.textContent = registryStatus[key] || "";
-    box.appendChild(status);
+    body.appendChild(status);
 
     registryBoxesEl.appendChild(box);
   }
@@ -362,26 +373,59 @@ function renderRegistry() {
 // o aspeto. Na consola: demoRegistration("meley", 30) -> registo feito há 30 min.
 if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   window.demoRegistration = (instance = "meley", minutesAgo = 30) => {
-    latestRegistration = { ...latestRegistration, [instance]: new Date(Date.now() - minutesAgo * 60000) };
+    latestRegistration = { ...latestRegistration, [instance]: { at: new Date(Date.now() - minutesAgo * 60000), channel: 1 } };
     renderRegistry();
   };
 }
 
-async function registerInstance(key) {
+const registryModal = document.getElementById("registry-modal");
+const registryForm = document.getElementById("registry-form");
+const registryChannelSelect = document.getElementById("registry-channel");
+const registryFormError = document.getElementById("registry-form-error");
+let registeringKey = null;
+
+// Passo 1: avisa se ainda não passaram 3h; passo 2: escolher o canal (1 a 6).
+function registerInstance(key) {
   const label = INSTANCES[key];
   const last = latestRegistration[key];
   if (last) {
-    const nextAt = new Date(last.getTime() + REGISTRATION_COOLDOWN_MS);
+    const nextAt = new Date(last.at.getTime() + REGISTRATION_COOLDOWN_MS);
     if (Date.now() < nextAt.getTime()) {
-      if (!confirm(`Já tens um registo de ${label} (feito ${formatRegistryTime(last)}).
+      if (!confirm(`Já tens um registo de ${label} (feito ${formatRegistryTime(last.at)}).
 Só podes voltar a registar a partir de ${formatRegistryTime(nextAt)}.
 Queres registar mesmo assim?`)) return;
     }
   }
 
+  registeringKey = key;
+  registryFormError.textContent = "";
+  document.getElementById("registry-modal-title").textContent = `Registo de ${label}`;
+  registryChannelSelect.innerHTML = "";
+  for (const channel of CHANNELS) {
+    const option = document.createElement("option");
+    option.value = String(channel);
+    option.textContent = `Canal ${channel}`;
+    registryChannelSelect.appendChild(option);
+  }
+  if (last && last.channel) registryChannelSelect.value = String(last.channel);
+  registryModal.showModal();
+}
+
+document.getElementById("registry-cancel").addEventListener("click", () => registryModal.close());
+
+registryForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const key = registeringKey;
+  const channel = Number(registryChannelSelect.value);
+  if (!key || !CHANNELS.includes(channel)) {
+    registryFormError.textContent = "Escolhe um canal.";
+    return;
+  }
+  registryModal.close();
+
   registryStatus.meley = registryStatus.balathor = "";
   try {
-    await saveRegistration(currentUser.uid, key);
+    await saveRegistration(currentUser.uid, key, channel);
   } catch (err) {
     registryStatus[key] = err.message || "Erro ao guardar o registo.";
     renderRegistry();
@@ -396,12 +440,12 @@ Queres registar mesmo assim?`)) return;
   } else {
     registryStatus[key] = "Registado. A enviar mensagem...";
     renderRegistry();
-    const results = await notifyRegistration(label, now, nextAt, recipients, currentUser.displayName);
+    const results = await notifyRegistration(INSTANCES[key], now, nextAt, recipients, channel);
     const failed = results.filter((r) => !r.ok);
     registryStatus[key] = failed.length === 0 ? "Registado e enviado no Discord." : `Registado, mas o Discord falhou: ${failed.map((f) => f.error).join(", ")}`;
   }
   renderRegistry();
-}
+});
 
 // ---------- Notifications ----------
 enableNotifBtn.addEventListener("click", () => {

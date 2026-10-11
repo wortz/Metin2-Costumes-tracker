@@ -219,6 +219,21 @@
     </form>
   </dialog>
 
+  <dialog id="registry-modal">
+    <form id="registry-form" class="card">
+      <h2 id="registry-modal-title">Registar</h2>
+      <label>Em que canal foi feito?
+        <select id="registry-channel" required></select>
+      </label>
+      <p class="hint-inline">Serve só para se saber — o intervalo de 3 horas é por instância, não por canal.</p>
+      <p id="registry-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="registry-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Registar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="settings-modal">
     <form id="settings-form" class="card">
       <h2>Configurações</h2>
