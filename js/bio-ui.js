@@ -7,7 +7,7 @@ import {
   subscribeToOwnBioTimers,
 } from "./bio.js";
 import { addCharacter, subscribeToOwnCharacters } from "./characters.js";
-import { computeRemaining, formatEndDate, formatRemaining } from "./costumes.js";
+import { computeRemaining, formatEndDate } from "./costumes.js";
 import { notifyBioTimer } from "./notifications.js";
 
 const listEl = document.getElementById("bio-list");
@@ -42,6 +42,12 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+// Tempo que falta só em horas e minutos (nestes timers nunca passa de 1 dia, por
+// isso não se mostram dias; 24 horas aparece como "24h 0m").
+function formatHoursMinutes({ days, hours, minutes }) {
+  return `${days * 24 + hours}h ${minutes}m`;
 }
 
 function formatHours(ms) {
@@ -120,9 +126,12 @@ function buildCard(timer) {
 
   const time = document.createElement("div");
   time.className = "costume-time";
-  time.innerHTML = `
-    <span class="remaining ${remaining.expired ? "ready" : "ok"}">${remaining.expired ? "Pronto" : formatRemaining(remaining)}</span>
-    <span class="end-date">${remaining.expired ? "terminou" : "termina"} em ${formatEndDate(remaining.endDate)}</span>`;
+  // Em grande: a data/hora a que termina; em pequeno: o tempo que falta.
+  time.innerHTML = remaining.expired
+    ? `<span class="remaining ready">Pronto</span>
+       <span class="end-date">terminou em ${formatEndDate(remaining.endDate)}</span>`
+    : `<span class="remaining ok">${formatEndDate(remaining.endDate)}</span>
+       <span class="end-date">faltam ${formatHoursMinutes(remaining)}</span>`;
 
   const actions = document.createElement("div");
   actions.className = "costume-actions";
