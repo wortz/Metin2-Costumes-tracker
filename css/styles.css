@@ -971,3 +971,9 @@ fieldset legend {
 #bio-collect-delete[hidden] {
   display: none;
 }
+
+/* Administração: só as colunas Personagens, Trajes, Pets e Estado ficam centradas. */
+.users-list th:nth-child(n+3):nth-child(-n+6),
+.users-list td:nth-child(n+3):nth-child(-n+6) {
+  text-align: center;
+}

@@ -1,4 +1,4 @@
-import { login, logout, onAuthChange, isAdmin, currentUser } from "./auth.js";
+import { login, logout, onAuthChange, isAdmin, isPrivileged, subscribeToOwnProfile, currentUser } from "./auth.js";
 import {
   COSTUME_TYPES,
   COSTUME_ICONS,
@@ -25,8 +25,9 @@ import {
   addCharacter,
   deleteCharacter,
   subscribeToOwnCharacters,
+  subscribeToAllCharacters,
 } from "./characters.js";
-import { createUser, disableUser, subscribeToUsers } from "./admin.js";
+import { createUser, disableUser, setPrivileged, subscribeToUsers } from "./admin.js";
 import {
   requestNotificationPermission,
   checkCostumeNotifications,
@@ -44,7 +45,7 @@ import {
 } from "./registrations.js";
 import { notifyRegistration } from "./notifications.js";
 import { startBio } from "./bio-ui.js";
-import { LIMITS } from "./limits.js";
+import { limitsFor } from "./limits.js";
 import { DISCORD_OAUTH_CLIENT_ID } from "./settings.js";
 import { DEFAULT_USER_SETTINGS, getUserSettings, saveUserSettings, subscribeToUserSettings } from "./user-settings.js";
 
@@ -144,6 +145,7 @@ let latestCharacters = [];
 let latestUsers = [];
 let latestAllCostumes = [];
 let latestAllPets = [];
+let latestAllCharacters = [];
 let latestRegistration = { meley: null, balathor: null };
 const registryStatus = {};
 let latestUserSettings = DEFAULT_USER_SETTINGS;
@@ -200,10 +202,19 @@ onAuthChange((user, err) => {
     })
   );
 
+  // Muda os limites logo que o admin torna a conta privilegiada (ou o remove).
+  unsubscribers.push(
+    subscribeToOwnProfile(user.uid, (profile) => {
+      currentUser.privileged = !!profile.privileged;
+      renderCostumes();
+    })
+  );
+
   unsubscribers.push(
     startBio(user, () =>
       Object.values(store).flatMap((st) => [...st.characters.map((c) => c.name), ...st.items.map((c) => c.character)]),
-    () => latestUserSettings.discordRecipients
+    () => latestUserSettings.discordRecipients,
+    () => userLimits()
     )
   );
 
@@ -234,7 +245,11 @@ onAuthChange((user, err) => {
       subscribeToAllCostumes((pets) => {
         latestAllPets = pets;
         renderUsers();
-      }, "pet")
+      }, "pet"),
+      subscribeToAllCharacters((characters) => {
+        latestAllCharacters = characters;
+        renderUsers();
+      })
     );
   }
 
@@ -265,6 +280,7 @@ function cleanupSubscriptions() {
   latestUsers = [];
   latestAllCostumes = [];
   latestAllPets = [];
+  latestAllCharacters = [];
   latestRegistration = { meley: null, balathor: null };
   latestUserSettings = DEFAULT_USER_SETTINGS;
 }
@@ -341,8 +357,13 @@ function knownCharacterNames() {
   return [...seen.values()];
 }
 
+// Limites da conta atual (base ou privilegiada).
+function userLimits() {
+  return limitsFor(isPrivileged());
+}
+
 function itemLimit() {
-  return IS_PET() ? LIMITS.pets : LIMITS.costumes;
+  return IS_PET() ? userLimits().pets : userLimits().costumes;
 }
 
 // ---------- Registos (Meley / Balathor) ----------
@@ -1257,8 +1278,8 @@ costumeForm.addEventListener("submit", async (e) => {
     return;
   }
   const isNewCharacter = !knownCharacterNames().some((n) => n.toLowerCase() === character.toLowerCase());
-  if (isNewCharacter && knownCharacterNames().length >= LIMITS.characters) {
-    costumeFormError.textContent = `Atingiste o limite de ${LIMITS.characters} personagens.`;
+  if (isNewCharacter && knownCharacterNames().length >= userLimits().characters) {
+    costumeFormError.textContent = `Atingiste o limite de ${userLimits().characters} personagens.`;
     return;
   }
 
@@ -1372,8 +1393,8 @@ characterForm.addEventListener("submit", async (e) => {
     characterFormError.textContent = "Já existe uma personagem com esse nome.";
     return;
   }
-  if (knownCharacterNames().length >= LIMITS.characters) {
-    characterFormError.textContent = `Atingiste o limite de ${LIMITS.characters} personagens.`;
+  if (knownCharacterNames().length >= userLimits().characters) {
+    characterFormError.textContent = `Atingiste o limite de ${userLimits().characters} personagens.`;
     return;
   }
   try {
@@ -1400,18 +1421,35 @@ function renderUsers() {
     return acc;
   }, {});
 
+  // Personagens por conta: as guardadas + as que só existem em trajes/pets, sem repetir.
+  const characterNamesByUid = {};
+  const addCharacterName = (uid, name) => {
+    if (!uid || !name) return;
+    (characterNamesByUid[uid] ||= new Set()).add(name.toLowerCase());
+  };
+  latestAllCharacters.forEach((c) => addCharacterName(c.ownerUid, c.name));
+  latestAllCostumes.forEach((c) => addCharacterName(c.ownerUid, c.character));
+  latestAllPets.forEach((p) => addCharacterName(p.ownerUid, p.character));
+
   const rows = latestUsers
     .slice()
     .sort((a, b) => (a.email || "").localeCompare(b.email || ""))
     .map((u) => {
       const count = countsByUid[u.uid] || 0;
       const petCount = petCountsByUid[u.uid] || 0;
+      const characterCount = characterNamesByUid[u.uid]?.size || 0;
       const isSelf = currentUser && currentUser.uid === u.uid;
       const statusTag = u.disabled
         ? '<span class="tag disabled">Desativado</span>'
         : u.role === "admin"
         ? '<span class="tag">Admin</span>'
+        : u.privileged
+        ? '<span class="tag">Privilegiada</span>'
         : "";
+      const privilegeBtn =
+        u.disabled || u.role === "admin"
+          ? ""
+          : `<button class="secondary small" data-uid="${u.uid}" data-action="privilege" data-value="${u.privileged ? "off" : "on"}">${u.privileged ? "Remover privilégio" : "Tornar privilegiada"}</button>`;
       const deleteBtn =
         u.disabled || isSelf
           ? ""
@@ -1420,10 +1458,11 @@ function renderUsers() {
         <tr>
           <td>${escapeHtml(u.displayName || u.email)}</td>
           <td>${escapeHtml(u.email)}</td>
+          <td>${characterCount}</td>
           <td>${count}</td>
           <td>${petCount}</td>
           <td>${statusTag}</td>
-          <td>${deleteBtn}</td>
+          <td>${privilegeBtn} ${deleteBtn}</td>
         </tr>
       `;
     })
@@ -1432,11 +1471,23 @@ function renderUsers() {
   usersListEl.innerHTML = `
     <table>
       <thead>
-        <tr><th>Nome</th><th>Email</th><th>Trajes</th><th>Pets</th><th>Estado</th><th></th></tr>
+        <tr><th>Nome</th><th>Email</th><th>Personagens</th><th>Trajes</th><th>Pets</th><th>Estado</th><th></th></tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
   `;
+
+  usersListEl.querySelectorAll('[data-action="privilege"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await setPrivileged(btn.dataset.uid, btn.dataset.value === "on");
+      } catch (err) {
+        alert(err.message || "Erro ao alterar a conta.");
+        btn.disabled = false;
+      }
+    });
+  });
 
   usersListEl.querySelectorAll('[data-action="disable"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -1473,7 +1524,7 @@ userForm.addEventListener("submit", async (e) => {
 
   submitBtn.disabled = true;
   try {
-    await createUser({ email, password, displayName });
+    await createUser({ email, password, displayName, privileged: document.getElementById("user-privileged").checked });
     userModal.close();
   } catch (err) {
     userFormError.textContent = friendlyAuthError(err);
@@ -1481,3 +1532,22 @@ userForm.addEventListener("submit", async (e) => {
     submitBtn.disabled = false;
   }
 });
+
+// ---------- Fechar as janelas ao clicar fora ----------
+// Vale para todas as janelas (<dialog>): um clique no fundo escurecido fecha-as.
+// Só fecha se o clique COMEÇOU e acabou fora (para não fechar ao selecionar texto
+// dentro da janela e largar o rato fora).
+for (const dialog of document.querySelectorAll("dialog")) {
+  let pressedOutside = false;
+  const isOutside = (e) => {
+    const rect = dialog.getBoundingClientRect();
+    return e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+  };
+  dialog.addEventListener("mousedown", (e) => {
+    pressedOutside = e.target === dialog && isOutside(e);
+  });
+  dialog.addEventListener("click", (e) => {
+    if (pressedOutside && e.target === dialog && isOutside(e)) dialog.close();
+    pressedOutside = false;
+  });
+}

@@ -56,7 +56,8 @@ service cloud.firestore {
     }
 
     match /characters/{characterId} {
-      allow read: if isActive() && (resource == null || resource.data.ownerUid == request.auth.uid);
+      // O admin lê todas (para contar as personagens de cada conta).
+      allow read: if isActive() && (resource == null || resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if isActive() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isActive() && resource.data.ownerUid == request.auth.uid;
     }

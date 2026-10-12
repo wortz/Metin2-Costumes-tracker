@@ -3,7 +3,7 @@ import {
   signOut,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { auth, db } from "./firebase-init.js";
 
 // Estado do utilizador atualmente autenticado (dados do Firestore, não só do Auth).
@@ -35,9 +35,23 @@ export async function loadCurrentUserProfile(firebaseUser) {
     email: firebaseUser.email,
     role: data.role || "user",
     disabled: !!data.disabled,
+    privileged: !!data.privileged,
     displayName: data.displayName || firebaseUser.email,
   };
   return currentUser;
+}
+
+// Conta com limites maiores (marcada pelo admin). O admin conta sempre como privilegiado.
+export function isPrivileged() {
+  return !!currentUser && (currentUser.role === "admin" || currentUser.privileged);
+}
+
+// Acompanha o próprio perfil em tempo real, para o estado "privilegiada" mudar
+// logo que o admin o altera, sem ser preciso voltar a entrar.
+export function subscribeToOwnProfile(uid, onChange) {
+  return onSnapshot(doc(db, "users", uid), (snap) => {
+    if (snap.exists()) onChange(snap.data());
+  });
 }
 
 export function isAdmin() {

@@ -25,6 +25,13 @@ export function deleteCharacter(characterId, kind = "costume") {
   return deleteDoc(doc(db, collectionsFor(kind).characters, characterId));
 }
 
+// Usado pelo admin para contar as personagens de todas as contas.
+export function subscribeToAllCharacters(onChange) {
+  return onSnapshot(collection(db, "characters"), (snap) => {
+    onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }, snapshotError("characters (todas)"));
+}
+
 export function subscribeToOwnCharacters(ownerUid, onChange, kind = "costume") {
   const q = query(collection(db, collectionsFor(kind).characters), where("ownerUid", "==", ownerUid));
   return onSnapshot(q, (snap) => {

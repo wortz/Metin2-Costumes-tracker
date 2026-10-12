@@ -9,7 +9,6 @@ import {
 import { addCharacter, subscribeToOwnCharacters } from "./characters.js";
 import { computeRemaining, formatEndDate, formatRemaining } from "./costumes.js";
 import { notifyBioTimer } from "./notifications.js";
-import { LIMITS } from "./limits.js";
 
 const listEl = document.getElementById("bio-list");
 const addBtn = document.getElementById("bio-add-btn");
@@ -36,6 +35,7 @@ let timers = [];
 let characters = [];
 let getExtraCharacterNames = () => [];
 let getRecipients = () => [];
+let getLimits = () => ({ characters: 5 });
 let editingTimer = null;
 
 function escapeHtml(str) {
@@ -225,8 +225,8 @@ characterForm.addEventListener("submit", async (e) => {
     characterError.textContent = "Já existe uma personagem com esse nome.";
     return;
   }
-  if (allCharacterNames().length >= LIMITS.characters) {
-    characterError.textContent = `Atingiste o limite de ${LIMITS.characters} personagens.`;
+  if (allCharacterNames().length >= getLimits().characters) {
+    characterError.textContent = `Atingiste o limite de ${getLimits().characters} personagens.`;
     return;
   }
   try {
@@ -254,8 +254,8 @@ addForm.addEventListener("submit", async (e) => {
   try {
     // Se for uma personagem nova, guarda-a (partilhada com trajes e pets).
     const known = allCharacterNames().some((n) => n.toLowerCase() === character.toLowerCase());
-    if (!known && allCharacterNames().length >= LIMITS.characters) {
-      addError.textContent = `Atingiste o limite de ${LIMITS.characters} personagens.`;
+    if (!known && allCharacterNames().length >= getLimits().characters) {
+      addError.textContent = `Atingiste o limite de ${getLimits().characters} personagens.`;
       return;
     }
     if (!known) await addCharacter({ ownerUid, name: character });
@@ -361,8 +361,9 @@ timeForm.addEventListener("submit", async (e) => {
 // ---------- Ligação à app ----------
 // Chamado no login; devolve a função que pára as subscrições. getExtraNames
 // devolve personagens que só existem nos trajes/pets (para também aparecerem aqui).
-export function startBio(user, getExtraNames, getRecipientsFn) {
+export function startBio(user, getExtraNames, getRecipientsFn, getLimitsFn) {
   ownerUid = user.uid;
+  getLimits = getLimitsFn || getLimits;
   getRecipients = getRecipientsFn || (() => []);
   getExtraCharacterNames = getExtraNames || (() => []);
   const unsubs = [

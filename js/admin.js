@@ -15,16 +15,22 @@ import { createUserWithoutSignOut } from "./firebase-init.js";
 
 // Cria um novo utilizador (só chamável pelo admin autenticado; as Firestore
 // rules impedem a criação do documento users/{uid} por quem não for admin).
-export async function createUser({ email, password, displayName }) {
+export async function createUser({ email, password, displayName, privileged = false }) {
   const uid = await createUserWithoutSignOut(email, password);
   await setDoc(doc(db, "users", uid), {
     email,
     displayName: displayName?.trim() || email,
     role: "user",
     disabled: false,
+    privileged: !!privileged,
     createdAt: serverTimestamp(),
   });
   return uid;
+}
+
+// Marca/desmarca uma conta como privilegiada (limites maiores).
+export function setPrivileged(uid, privileged) {
+  return updateDoc(doc(db, "users", uid), { privileged: !!privileged });
 }
 
 // "Apagar" utilizador = desativar a conta (impede novo login) + apagar os seus trajes e pets.
