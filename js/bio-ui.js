@@ -9,6 +9,7 @@ import {
 import { addCharacter, subscribeToOwnCharacters } from "./characters.js";
 import { computeRemaining, formatEndDate, formatRemaining } from "./costumes.js";
 import { notifyBioTimer } from "./notifications.js";
+import { LIMITS } from "./limits.js";
 
 const listEl = document.getElementById("bio-list");
 const addBtn = document.getElementById("bio-add-btn");
@@ -224,6 +225,10 @@ characterForm.addEventListener("submit", async (e) => {
     characterError.textContent = "Já existe uma personagem com esse nome.";
     return;
   }
+  if (allCharacterNames().length >= LIMITS.characters) {
+    characterError.textContent = `Atingiste o limite de ${LIMITS.characters} personagens.`;
+    return;
+  }
   try {
     await addCharacter({ ownerUid, name });
     characterModal.close();
@@ -249,6 +254,10 @@ addForm.addEventListener("submit", async (e) => {
   try {
     // Se for uma personagem nova, guarda-a (partilhada com trajes e pets).
     const known = allCharacterNames().some((n) => n.toLowerCase() === character.toLowerCase());
+    if (!known && allCharacterNames().length >= LIMITS.characters) {
+      addError.textContent = `Atingiste o limite de ${LIMITS.characters} personagens.`;
+      return;
+    }
     if (!known) await addCharacter({ ownerUid, name: character });
     await addBioTimer({ ownerUid, character, type: currentType() });
     addModal.close();

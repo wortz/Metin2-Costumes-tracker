@@ -44,6 +44,7 @@ import {
 } from "./registrations.js";
 import { notifyRegistration } from "./notifications.js";
 import { startBio } from "./bio-ui.js";
+import { LIMITS } from "./limits.js";
 import { DISCORD_OAUTH_CLIENT_ID } from "./settings.js";
 import { DEFAULT_USER_SETTINGS, getUserSettings, saveUserSettings, subscribeToUserSettings } from "./user-settings.js";
 
@@ -314,7 +315,6 @@ function showView(view) {
 function openKind(kind) {
   currentKind = kind;
   syncCurrentKind();
-  listTitleEl.textContent = kindText().title;
   addCostumeBtn.textContent = kindText().add;
   showView("list");
   renderCostumes();
@@ -329,6 +329,21 @@ menuViewEl.addEventListener("click", (e) => {
 });
 
 backMenuBtn.addEventListener("click", () => showView("menu"));
+
+// Personagens conhecidas da conta (partilhadas por trajes, pets e Biologo / 6-7), sem repetir.
+function knownCharacterNames() {
+  const seen = new Map();
+  for (const st of Object.values(store)) {
+    for (const name of [...st.characters.map((c) => c.name), ...st.items.map((c) => c.character)]) {
+      if (name && !seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name);
+    }
+  }
+  return [...seen.values()];
+}
+
+function itemLimit() {
+  return IS_PET() ? LIMITS.pets : LIMITS.costumes;
+}
 
 // ---------- Registos (Meley / Balathor) ----------
 const INSTANCE_ICONS = { meley: "assets/icons/meley.png", balathor: "assets/icons/balathor.png" };
@@ -649,6 +664,7 @@ function byRemaining(a, b) {
 
 function renderCostumes() {
   renderExpiryBanner();
+  listTitleEl.textContent = `${kindText().title} (${latestCostumes.length}/${itemLimit()})`;
   costumesListEl.innerHTML = "";
 
   if (latestCostumes.length === 0 && latestSections.length === 0 && latestCharacters.length === 0 && !store.costume.items.length && !store.pet.items.length) {
@@ -1236,6 +1252,16 @@ costumeForm.addEventListener("submit", async (e) => {
     }
   }
 
+  if (store[currentKind].items.length >= itemLimit()) {
+    costumeFormError.textContent = `Atingiste o limite de ${itemLimit()} ${kindText().plural}.`;
+    return;
+  }
+  const isNewCharacter = !knownCharacterNames().some((n) => n.toLowerCase() === character.toLowerCase());
+  if (isNewCharacter && knownCharacterNames().length >= LIMITS.characters) {
+    costumeFormError.textContent = `Atingiste o limite de ${LIMITS.characters} personagens.`;
+    return;
+  }
+
   try {
     await ensureCharacterSaved(character);
     await addCostume({
@@ -1344,6 +1370,10 @@ characterForm.addEventListener("submit", async (e) => {
   );
   if (exists) {
     characterFormError.textContent = "Já existe uma personagem com esse nome.";
+    return;
+  }
+  if (knownCharacterNames().length >= LIMITS.characters) {
+    characterFormError.textContent = `Atingiste o limite de ${LIMITS.characters} personagens.`;
     return;
   }
   try {
