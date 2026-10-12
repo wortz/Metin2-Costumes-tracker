@@ -89,9 +89,17 @@ function alertBody(costume, remaining, kind) {
 // do fuso horário de quem/onde corre o código (browser do utilizador, ou o
 // Worker que corre em UTC) — ajusta-se sozinho ao horário de inverno/verão.
 export function formatDiscordEndDate(date) {
-  const datePart = date.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Lisbon" });
-  const timePart = date.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Lisbon" });
-  return `${datePart}, ${timePart} PT`;
+  // Mostra a hora em Portugal (PT) e na República Checa / Suíça (CZ/CH, que têm a
+  // mesma hora); o fuso de cada um ajusta-se sozinho ao horário de inverno/verão.
+  const part = (tz) => ({
+    date: date.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: tz }),
+    time: date.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: tz }),
+  });
+  const pt = part("Europe/Lisbon");
+  const cz = part("Europe/Prague");
+  // A data só se repete na segunda hora se for um dia diferente (por volta da meia-noite).
+  const czText = cz.date === pt.date ? cz.time : `${cz.date}, ${cz.time}`;
+  return `${pt.date}, ${pt.time} PT (${czText} CZ/CH)`;
 }
 
 // Mensagem para o Discord, no formato pedido: "AVISO: Traje de X do personagem

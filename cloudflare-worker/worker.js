@@ -198,10 +198,18 @@ const COSTUME_TYPES = {
 // corre em UTC por padrão, por isso é preciso fixar o fuso explicitamente para
 // não ficar 1h atrasado em horário de verão. Ajusta-se sozinho ao
 // inverno/verão, tal como o mesmo helper no cliente (js/notifications.js).
-function formatEndDate(endAt) {
-  const datePart = endAt.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Lisbon" });
-  const timePart = endAt.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Lisbon" });
-  return `${datePart}, ${timePart} PT`;
+function formatEndDate(date) {
+  // Mostra a hora em Portugal (PT) e na República Checa / Suíça (CZ/CH, que têm a
+  // mesma hora); o fuso de cada um ajusta-se sozinho ao horário de inverno/verão.
+  const part = (tz) => ({
+    date: date.toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", timeZone: tz }),
+    time: date.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: tz }),
+  });
+  const pt = part("Europe/Lisbon");
+  const cz = part("Europe/Prague");
+  // A data só se repete na segunda hora se for um dia diferente (por volta da meia-noite).
+  const czText = cz.date === pt.date ? cz.time : `${cz.date}, ${cz.time}`;
+  return `${pt.date}, ${pt.time} PT (${czText} CZ/CH)`;
 }
 
 // Mesmo formato usado pelo cliente (js/notifications.js), para as mensagens
