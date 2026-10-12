@@ -83,13 +83,6 @@ export function renewPet(petId, durationMs) {
   });
 }
 
-// Marca que já se avisou para este traje num determinado estágio ("threshold" ou
-// "12h"), para não repetir o mesmo aviso. Partilhado entre o browser e o Worker.
-export function markCostumeNotified(costumeId, stage, kind = "costume") {
-  const field = stage === "12h" ? "notified12h" : "notifiedThreshold";
-  return updateDoc(doc(db, collectionsFor(kind).items, costumeId), { [field]: true });
-}
-
 // Subscreve em tempo real aos trajes de um utilizador. Devolve a função unsubscribe.
 export function subscribeToOwnCostumes(ownerUid, onChange, kind = "costume") {
   const q = query(collection(db, collectionsFor(kind).items), where("ownerUid", "==", ownerUid));

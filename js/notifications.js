@@ -1,8 +1,7 @@
 import { DISCORD_DM_WORKER_URL } from "./settings.js";
 import { auth } from "./firebase-init.js";
-import { markCostumeNotified, COSTUME_TYPES } from "./costumes.js";
+import { COSTUME_TYPES } from "./costumes.js";
 
-const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const REPEAT_SETTING_KEY = "metin2-costumes-notify-repeat";
 const BROWSER_NOTIFIED_KEY = "metin2-costumes-browser-notified-hours";
 
@@ -102,16 +101,6 @@ export function formatDiscordEndDate(date) {
   return `${pt.date}, ${pt.time} PT (${czText} CZ/CH)`;
 }
 
-// Mensagem para o Discord, no formato pedido: "AVISO: Traje de X do personagem
-// Y (descrição) a terminar em Z horas - DD/MM, HH:MM PT" (ou "ALERTA
-// IMPORTANTE" nas 12h).
-function discordAlertMessage(costume, stage, remaining, kind) {
-  const prefix = stage === "12h" ? "🚨 ALERTA IMPORTANTE" : "⚠️ AVISO";
-  const descPart = costume.description ? ` (${costume.description})` : "";
-  const hours = Math.floor(remaining.totalMs / (60 * 60 * 1000));
-  return `${prefix}: ${itemLabel(costume, kind)} do personagem ${costume.character}${descPart} a terminar em ${hours} horas - ${formatDiscordEndDate(remaining.endDate)}`;
-}
-
 // Avisa todos os destinatários do Discord de um registo de Meley/Balathor,
 // através do segundo bot. Devolve os resultados de cada envio.
 export function notifyRegistration(instanceLabel, registeredAt, nextAt, recipients, channel) {
@@ -188,34 +177,11 @@ function checkBrowserNotifications(costumes, computeRemaining, thresholdMs, kind
   if (changed) saveBrowserNotifiedState(state);
 }
 
-// DM no Discord: no máximo 2 avisos por traje — ao limiar do utilizador e às
-// 12h ou menos — independentemente da preferência de repetição. Se um traje já
-// nascer com menos de 12h (salta logo o limiar), só manda o mais urgente (o
-// "ALERTA IMPORTANTE"), não os dois de uma vez. Manda a todos os destinatários
-// configurados. Estado guardado no próprio traje (Firestore), partilhado com
-// o Worker que corre em fundo.
-function checkDiscordDMs(costumes, computeRemaining, thresholdMs, recipients, kind) {
-  if (!recipients || recipients.length === 0 || !auth.currentUser) return;
-
-  for (const costume of costumes) {
-    const remaining = computeRemaining(costume.endAt);
-    if (remaining.expired) continue;
-
-    if (remaining.totalMs <= TWELVE_HOURS_MS && !costume.notified12h) {
-      const message = discordAlertMessage(costume, "12h", remaining, kind);
-      for (const recipient of recipients) sendDiscordDM(recipient.id, message);
-      markCostumeNotified(costume.id, "12h", kind);
-      if (!costume.notifiedThreshold) markCostumeNotified(costume.id, "threshold", kind);
-    } else if (remaining.totalMs <= thresholdMs && !costume.notifiedThreshold) {
-      const message = discordAlertMessage(costume, "threshold", remaining, kind);
-      for (const recipient of recipients) sendDiscordDM(recipient.id, message);
-      markCostumeNotified(costume.id, "threshold", kind);
-    }
-  }
-}
-
+// As DMs do Discord de expiração (traje/pet a acabar) são enviadas SÓ pelo Worker
+// (de hora a hora, mesmo com o site fechado) — assim não há duplicados quando o
+// site está aberto em vários separadores ou dispositivos. Aqui só ficam as
+// notificações do browser.
 export function checkCostumeNotifications(costumes, computeRemaining, userSettings, kind = "costume") {
   const thresholdMs = (userSettings?.notifyThresholdDays || 1) * 24 * 60 * 60 * 1000;
   checkBrowserNotifications(costumes, computeRemaining, thresholdMs, kind);
-  checkDiscordDMs(costumes, computeRemaining, thresholdMs, userSettings?.discordRecipients, kind);
 }

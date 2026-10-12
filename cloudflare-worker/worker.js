@@ -155,7 +155,11 @@ async function listAllCostumes(accessToken, projectId, collectionId = "costumes"
   const rows = await res.json();
   return rows
     .filter((row) => row.document)
-    .map((row) => ({ id: row.document.name.split("/").pop(), ...fromFirestoreFields(row.document.fields) }));
+    .map((row) => ({
+      id: row.document.name.split("/").pop(),
+      _updateTime: row.document.updateTime,
+      ...fromFirestoreFields(row.document.fields),
+    }));
 }
 
 async function getUserSettingsDoc(accessToken, projectId, uid) {
@@ -170,7 +174,11 @@ async function getUserSettingsDoc(accessToken, projectId, uid) {
   return fromFirestoreFields(docBody.fields);
 }
 
-async function patchCostume(accessToken, projectId, costumeId, updates, collectionId = "costumes") {
+// Atualiza campos do documento. Se for passado updateTime, a escrita só acontece se o
+// documento ainda não mudou desde que foi lido — é assim que se "reserva" um aviso
+// de forma atómica: se outra pessoa/aba/Worker já o reservou, a escrita falha e
+// devolve false (e quem perdeu não envia a mensagem, evitando duplicados).
+async function patchCostume(accessToken, projectId, costumeId, updates, collectionId = "costumes", updateTime = null) {
   const mask = Object.keys(updates)
     .map((key) => `updateMask.fieldPaths=${key}`)
     .join("&");
@@ -178,14 +186,18 @@ async function patchCostume(accessToken, projectId, costumeId, updates, collecti
   for (const [key, value] of Object.entries(updates)) {
     fields[key] = toFirestoreValue(value);
   }
-  const res = await fetch(`${firestoreBaseUrl(projectId)}/${collectionId}/${costumeId}?${mask}`, {
+  const precondition = updateTime ? `&currentDocument.updateTime=${encodeURIComponent(updateTime)}` : "";
+  const res = await fetch(`${firestoreBaseUrl(projectId)}/${collectionId}/${costumeId}?${mask}${precondition}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ fields }),
   });
   if (!res.ok) {
-    throw new Error(`Falha ao atualizar traje ${costumeId}: ${await res.text()}`);
+    const body = await res.text();
+    if (updateTime && [400, 409, 412].includes(res.status) && /FAILED_PRECONDITION|ABORTED/.test(body)) return false;
+    throw new Error(`Falha ao atualizar ${collectionId}/${costumeId}: ${body}`);
   }
+  return true;
 }
 
 const COSTUME_TYPES = {
@@ -287,54 +299,63 @@ async function runNotificationSweep(env) {
     }
 
     const thresholdMs = (settings.notifyThresholdDays || 1) * 24 * 60 * 60 * 1000;
-    const updates = {};
     const remainingHours = Math.round(remainingMs / (60 * 60 * 1000));
 
     // Se um traje já nascer com menos de 12h (salta logo o limiar do utilizador),
     // só manda o mais urgente (o "ALERTA IMPORTANTE"), não os dois de uma vez.
+    let stage = null;
+    const updates = {};
     if (remainingMs <= TWELVE_HOURS_MS && !costume.notified12h) {
-      const message = discordAlertMessage(costume, "12h", remainingMs, endAt);
-      const failures = [];
-      for (const recipient of recipients) {
-        try {
-          await sendDiscordDM(env, recipient.id, message);
-        } catch (err) {
-          failures.push(err.message);
-        }
-      }
+      stage = "12h";
       updates.notified12h = true;
       if (!costume.notifiedThreshold) updates.notifiedThreshold = true;
-      if (failures.length > 0) summary.errors.push({ id: costume.id, stage: "12h", error: failures.join("; ") });
-      summary.sent.push({ id: costume.id, stage: "12h", remainingHours, recipients: recipients.length - failures.length });
     } else if (remainingMs <= thresholdMs && !costume.notifiedThreshold) {
-      const message = discordAlertMessage(costume, "threshold", remainingMs, endAt);
-      const failures = [];
-      for (const recipient of recipients) {
-        try {
-          await sendDiscordDM(env, recipient.id, message);
-        } catch (err) {
-          failures.push(err.message);
-        }
-      }
+      stage = "threshold";
       updates.notifiedThreshold = true;
-      if (failures.length > 0) summary.errors.push({ id: costume.id, stage: "threshold", error: failures.join("; ") });
-      summary.sent.push({ id: costume.id, stage: "threshold", remainingHours, recipients: recipients.length - failures.length });
-    } else {
+    }
+
+    if (!stage) {
       summary.skipped.push({
         id: costume.id,
         reason: costume.notifiedThreshold || costume.notified12h ? "já notificado" : "ainda fora do limiar",
         remainingHours,
         thresholdHours: thresholdMs / 3600000,
       });
+      continue;
     }
 
-    if (Object.keys(updates).length > 0) {
+    // Reserva o aviso ANTES de enviar: se o site (ou outra execução) o reservou entretanto,
+    // a escrita falha e não se envia — assim nunca há mensagens duplicadas.
+    let claimed;
+    try {
+      claimed = await patchCostume(
+        accessToken,
+        projectId,
+        costume.id,
+        updates,
+        costume._kind === "pet" ? "pets" : "costumes",
+        costume._updateTime
+      );
+    } catch (err) {
+      summary.errors.push({ id: costume.id, stage: "patch", error: err.message });
+      continue;
+    }
+    if (!claimed) {
+      summary.skipped.push({ id: costume.id, reason: "já reservado por outro" });
+      continue;
+    }
+
+    const message = discordAlertMessage(costume, stage, remainingMs, endAt);
+    const failures = [];
+    for (const recipient of recipients) {
       try {
-        await patchCostume(accessToken, projectId, costume.id, updates, costume._kind === "pet" ? "pets" : "costumes");
+        await sendDiscordDM(env, recipient.id, message);
       } catch (err) {
-        summary.errors.push({ id: costume.id, stage: "patch", error: err.message });
+        failures.push(err.message);
       }
     }
+    if (failures.length > 0) summary.errors.push({ id: costume.id, stage, error: failures.join("; ") });
+    summary.sent.push({ id: costume.id, stage, remainingHours, recipients: recipients.length - failures.length });
   }
 
   return summary;
@@ -374,6 +395,15 @@ async function runBioReadyCheck(env) {
     }
     const recipients = getRecipients(settingsCache.get(timer.ownerUid));
 
+    // Reserva o aviso antes de enviar (se o timer mudou entretanto, não envia).
+    try {
+      const claimed = await patchCostume(accessToken, projectId, timer.id, { readyNotified: true }, "bioTimers", timer._updateTime);
+      if (!claimed) continue;
+    } catch (err) {
+      console.error(err.message);
+      continue;
+    }
+
     const message = `✅ ${type.label} (${timer.character}) já pode ser ${type.infinitive}!`;
     for (const recipient of recipients) {
       try {
@@ -381,11 +411,6 @@ async function runBioReadyCheck(env) {
       } catch (err) {
         console.error(err.message);
       }
-    }
-    try {
-      await patchCostume(accessToken, projectId, timer.id, { readyNotified: true }, "bioTimers");
-    } catch (err) {
-      console.error(err.message);
     }
   }
 }
