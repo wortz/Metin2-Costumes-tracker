@@ -43,6 +43,7 @@ import {
   saveRegistration,
 } from "./registrations.js";
 import { notifyRegistration } from "./notifications.js";
+import { startBio } from "./bio-ui.js";
 import { DISCORD_OAUTH_CLIENT_ID } from "./settings.js";
 import { DEFAULT_USER_SETTINGS, getUserSettings, saveUserSettings, subscribeToUserSettings } from "./user-settings.js";
 
@@ -60,6 +61,7 @@ const menuAdminTile = document.getElementById("menu-admin-tile");
 const listTitleEl = document.getElementById("list-title");
 const costumesViewEl = document.getElementById("costumes-view");
 const adminViewEl = document.getElementById("admin-view");
+const bioViewEl = document.getElementById("bio-view");
 const costumesListEl = document.getElementById("costumes-list");
 const expiryBannerEl = document.getElementById("expiry-banner");
 const urgentBannerEl = document.getElementById("urgent-banner");
@@ -198,6 +200,13 @@ onAuthChange((user, err) => {
   );
 
   unsubscribers.push(
+    startBio(user, () =>
+      Object.values(store).flatMap((st) => [...st.characters.map((c) => c.name), ...st.items.map((c) => c.character)]),
+    () => latestUserSettings.discordRecipients
+    )
+  );
+
+  unsubscribers.push(
     subscribeToRegistration(user.uid, (registration) => {
       latestRegistration = registration;
       renderRegistry();
@@ -298,6 +307,7 @@ function showView(view) {
   menuViewEl.hidden = view !== "menu";
   costumesViewEl.hidden = view !== "list";
   adminViewEl.hidden = view !== "admin";
+  bioViewEl.hidden = view !== "bio";
   backMenuBtn.hidden = view === "menu";
 }
 
@@ -314,6 +324,7 @@ menuViewEl.addEventListener("click", (e) => {
   const tile = e.target.closest(".menu-tile");
   if (!tile) return;
   if (tile.dataset.open === "admin") showView("admin");
+  else if (tile.dataset.open === "bio") showView("bio");
   else openKind(tile.dataset.open);
 });
 
@@ -756,13 +767,13 @@ function ensureCharacterDefaultSection(character, defaultSections) {
     // move os trajes dos outros para lá, e apaga-os.
     pendingDedup.add(key);
     const [keep, ...extras] = defaultSections;
-    Promise.all(extras.map((extra) => deleteSection(extra.id, keep.id, currentKind))).finally(() => pendingDedup.delete(key));
+    Promise.all(extras.map((extra) => deleteSection(extra.id, keep.id, currentKind))).catch((err) => console.error("Erro ao limpar secções duplicadas:", err)).finally(() => pendingDedup.delete(key));
     return;
   }
 
   if (defaultSections.length > 0 || pendingDefaultSections.has(key)) return;
   pendingDefaultSections.add(key);
-  ensureDefaultSection({ ownerUid: currentUser.uid, character, kind: currentKind }).finally(() => {
+  ensureDefaultSection({ ownerUid: currentUser.uid, character, kind: currentKind }).catch((err) => console.error("Erro ao criar a secção Geral:", err)).finally(() => {
     pendingDefaultSections.delete(key);
   });
 }
@@ -774,7 +785,7 @@ function migrateOrphanedCostumes(character, defaultSection) {
   const key = `${currentKind}:${character}`;
   if (orphaned.length === 0 || pendingMigrations.has(key)) return;
   pendingMigrations.add(key);
-  Promise.all(orphaned.map((c) => moveCostume(c.id, { character, sectionId: defaultSection.id }, currentKind))).finally(() =>
+  Promise.all(orphaned.map((c) => moveCostume(c.id, { character, sectionId: defaultSection.id }, currentKind))).catch((err) => console.error("Erro ao mover itens para a secção Geral:", err)).finally(() =>
     pendingMigrations.delete(key)
   );
 }

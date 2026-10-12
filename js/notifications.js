@@ -63,13 +63,15 @@ export async function sendDiscordDM(userId, message, bot = "default") {
 // Envia a mensagem de teste pelos dois bots (trajes/pets e registos). Devolve
 // { ok, error }, com o erro a indicar qual dos bots falhou.
 export async function testDiscordDM(userId) {
-  const [costumes, registry] = await Promise.all([
+  const [costumes, registry, bio] = await Promise.all([
     sendDiscordDM(userId, "✅ Teste do Metin2 Timers Tracker (bot dos trajes e pets) — a DM está a funcionar!"),
     sendDiscordDM(userId, "✅ Teste do Metin2 Timers Tracker (bot dos registos) — a DM está a funcionar!", "registry"),
+    sendDiscordDM(userId, "✅ Teste do Metin2 Timers Tracker (bot do Biologo / 6-7) — a DM está a funcionar!", "bio"),
   ]);
   const errors = [];
   if (!costumes.ok) errors.push(`bot dos trajes: ${costumes.error}`);
   if (!registry.ok) errors.push(`bot dos registos: ${registry.error}`);
+  if (!bio.ok) errors.push(`bot do Biologo / 6-7: ${bio.error}`);
   return errors.length === 0 ? { ok: true } : { ok: false, error: errors.join(" | ") };
 }
 
@@ -109,6 +111,18 @@ export function notifyRegistration(instanceLabel, registeredAt, nextAt, recipien
   const message = `📝 Registo de ${instanceLabel} feito - CH ${channel}.
 Próximo registo possível a ${formatDiscordEndDate(nextAt)}`;
   return Promise.all(recipients.map((r) => sendDiscordDM(r.id, message, "registry")));
+}
+
+// Avisa os destinatários (3.º bot) de que um timer de Biologo / 6-7 foi entregue/
+// recolhido ou teve o tempo alterado, com a hora a que já pode ser entregue/recolhido.
+export function notifyBioTimer({ label, action, character, readyAt, changed }, recipients) {
+  if (!recipients || recipients.length === 0) return Promise.resolve([]);
+  const past = action === "Entregar" ? "entregue" : "recolhido";
+  const first = changed ? `⏳ Tempo do ${label} (${character}) alterado.` : `⏳ ${label} (${character}) ${past}.`;
+  const second = changed
+    ? `Pode ser ${past} a ${formatDiscordEndDate(readyAt)}`
+    : `Pode ser ${past} novamente a ${formatDiscordEndDate(readyAt)}`;
+  return Promise.all(recipients.map((r) => sendDiscordDM(r.id, `${first}\n${second}`, "bio")));
 }
 
 // Avisa todos os destinatários do Discord de que um traje foi renovado, com o

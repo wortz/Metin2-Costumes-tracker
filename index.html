@@ -29,9 +29,11 @@
 
   <div id="app-view" hidden>
     <header>
+      <div class="header-left">
+        <button id="back-menu-btn" class="secondary" hidden>← Menu</button>
+      </div>
       <h1><img src="assets/icons/favicon.png" alt="" class="title-icon" />Metin2 Timers Tracker</h1>
       <div class="header-actions">
-        <button id="back-menu-btn" class="secondary" hidden>← Menu</button>
         <button id="open-settings-btn" class="secondary">⚙ Configurações</button>
         <span id="user-email" class="user-email"></span>
         <button id="logout-btn" class="secondary">Sair</button>
@@ -51,6 +53,11 @@
             <span class="menu-tile-emoji">🐾</span>
             <span class="menu-tile-name">Pets</span>
             <span class="menu-tile-desc">Duração fixa, renova e volta ao início</span>
+          </button>
+          <button class="menu-tile" data-open="bio">
+            <span class="menu-tile-emoji">🧪</span>
+            <span class="menu-tile-name">Biologo / 6-7</span>
+            <span class="menu-tile-desc">Timers de entregar e recolher</span>
           </button>
           <button class="menu-tile" data-open="admin" id="menu-admin-tile" hidden>
             <span class="menu-tile-emoji">🛠</span>
@@ -77,6 +84,14 @@
           <button id="enable-notif-btn" type="button">Ativar notificações</button>
         </p>
         <div id="costumes-list" class="costumes-list"></div>
+      </section>
+
+      <section id="bio-view" class="view" hidden>
+        <div class="section-header">
+          <h2>Biologo / 6-7</h2>
+          <button id="bio-add-btn">+ Personagem</button>
+        </div>
+        <div id="bio-list" class="costumes-list"></div>
       </section>
 
       <section id="admin-view" class="view" hidden>
@@ -215,6 +230,87 @@
       <div class="modal-actions">
         <button type="button" id="section-cancel" class="secondary">Cancelar</button>
         <button type="submit">Criar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bio-character-modal">
+    <form id="bio-character-form" class="card">
+      <h2>Nova personagem</h2>
+      <label>Nome da personagem
+        <input id="bio-character-name" required placeholder="Nome da personagem" />
+      </label>
+      <p id="bio-character-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="bio-character-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Criar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bio-modal">
+    <form id="bio-form" class="card">
+      <h2>Adicionar tempo</h2>
+      <label>Personagem
+        <input id="bio-character" list="bio-character-list" required autocomplete="off" placeholder="Escolhe uma existente ou escreve uma nova" />
+        <datalist id="bio-character-list"></datalist>
+      </label>
+      <label>Tipo
+        <select id="bio-group">
+          <option value="bio">Biologo</option>
+          <option value="sixseven">6-7</option>
+        </select>
+      </label>
+      <label id="bio-subtype-label">Biologo
+        <select id="bio-subtype">
+          <option value="bio18">Biologo 1-8</option>
+          <option value="jewels">Joias</option>
+        </select>
+      </label>
+      <p id="bio-duration-hint" class="hint-inline"></p>
+      <p class="hint-inline">Cada personagem só pode ter um Biologo e um 6-7.</p>
+      <p id="bio-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="bio-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Adicionar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bio-collect-modal">
+    <div class="card">
+      <h2 id="bio-collect-title">Entregar</h2>
+      <p id="bio-collect-text" class="hint-inline"></p>
+      <fieldset>
+        <legend>Novo tempo (pré-definido, podes alterar)</legend>
+        <div class="time-inputs">
+          <label>Horas <input type="number" id="bio-collect-hours" min="0" value="0" /></label>
+          <label>Minutos <input type="number" id="bio-collect-minutes" min="0" max="59" value="0" /></label>
+        </div>
+      </fieldset>
+      <p id="bio-collect-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="bio-collect-cancel" class="secondary">Cancelar</button>
+        <button type="button" id="bio-collect-delete" class="danger">Apagar</button>
+        <button type="button" id="bio-collect-new">Confirmar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="bio-time-modal">
+    <form id="bio-time-form" class="card">
+      <h2 id="bio-time-title">Alterar tempo</h2>
+      <fieldset>
+        <legend>Novo tempo restante</legend>
+        <div class="time-inputs">
+          <label>Horas <input type="number" id="bio-time-hours" min="0" value="0" /></label>
+          <label>Minutos <input type="number" id="bio-time-minutes" min="0" max="59" value="0" /></label>
+        </div>
+      </fieldset>
+      <p id="bio-time-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="bio-time-cancel" class="secondary">Cancelar</button>
+        <button type="submit">Guardar</button>
       </div>
     </form>
   </dialog>

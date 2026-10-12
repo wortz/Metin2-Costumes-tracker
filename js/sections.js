@@ -12,7 +12,7 @@ import {
   writeBatch,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { db } from "./firebase-init.js";
+import { auth, db, snapshotError } from "./firebase-init.js";
 import { collectionsFor } from "./kinds.js";
 
 // Cria uma sub-secção dentro de uma personagem.
@@ -34,8 +34,10 @@ export function addSection({ ownerUid, character, name, order, kind = "costume" 
 export async function ensureDefaultSection({ ownerUid, character, kind = "costume" }) {
   const id = `default__${ownerUid}__${encodeURIComponent(character)}`;
   const ref = doc(db, collectionsFor(kind).sections, id);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
+  // Ler um documento que ainda não existe pode ser recusado pelas regras; nesse
+  // caso assume-se que não existe e cria-se (a criação é permitida ao dono).
+  const snap = await getDoc(ref).catch(() => null);
+  if (!snap || !snap.exists()) {
     await setDoc(ref, {
       ownerUid,
       character,
@@ -51,7 +53,7 @@ export async function ensureDefaultSection({ ownerUid, character, kind = "costum
 // Apaga a secção; os itens que lá estavam passam para fallbackSectionId (normalmente a secção "Geral").
 export async function deleteSection(sectionId, fallbackSectionId = null, kind = "costume") {
   const cols = collectionsFor(kind);
-  const itemsSnap = await getDocs(query(collection(db, cols.items), where("sectionId", "==", sectionId)));
+  const itemsSnap = await getDocs(query(collection(db, cols.items), where("ownerUid", "==", auth.currentUser.uid), where("sectionId", "==", sectionId)));
   const batch = writeBatch(db);
   itemsSnap.forEach((docSnap) => batch.update(docSnap.ref, { sectionId: fallbackSectionId }));
   batch.delete(doc(db, cols.sections, sectionId));
@@ -63,7 +65,7 @@ export function subscribeToOwnSections(ownerUid, onChange, kind = "costume") {
   return onSnapshot(q, (snap) => {
     const sections = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     onChange(sections);
-  });
+  }, snapshotError(collectionsFor(kind).sections));
 }
 
 // Aplica uma nova ordem a várias secções de uma vez (reordenar dentro da mesma personagem).

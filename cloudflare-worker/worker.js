@@ -10,6 +10,7 @@
 // Variáveis a configurar no Worker:
 //   DISCORD_BOT_TOKEN      (secret) -> o token do bot do Discord
 //   DISCORD_REGISTRY_BOT_TOKEN (secret) -> token do 2.º bot (avisos de registo Meley/Balathor)
+//   DISCORD_BIO_BOT_TOKEN  (secret) -> token do 3.º bot (timers de Biologo / 6-7)
 //   FIREBASE_PROJECT_ID    (var)    -> o project id do Firebase (ex: "costumes-tracker")
 //   FIREBASE_CLIENT_EMAIL  (secret) -> "client_email" da chave de conta de serviço
 //   FIREBASE_PRIVATE_KEY   (secret) -> "private_key" da chave de conta de serviço
@@ -35,9 +36,11 @@ function json(status, data) {
 async function sendDiscordDM(env, discordUserId, message, botKey = "default") {
   // Os registos de Meley/Balathor usam um segundo bot, para as mensagens
   // aparecerem separadas das de expiração de trajes/pets.
-  const token = botKey === "registry" ? env.DISCORD_REGISTRY_BOT_TOKEN : env.DISCORD_BOT_TOKEN;
+  const tokenNames = { default: "DISCORD_BOT_TOKEN", registry: "DISCORD_REGISTRY_BOT_TOKEN", bio: "DISCORD_BIO_BOT_TOKEN" };
+  const tokenName = tokenNames[botKey] || tokenNames.default;
+  const token = env[tokenName];
   if (!token) {
-    throw new Error(botKey === "registry" ? "Bot de registos não configurado (DISCORD_REGISTRY_BOT_TOKEN)." : "Bot não configurado.");
+    throw new Error(`Bot não configurado (${tokenName}).`);
   }
   const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
     method: "POST",
@@ -329,6 +332,56 @@ async function runNotificationSweep(env) {
   return summary;
 }
 
+// ---------- Timers de Biologo / 6-7: aviso quando já podem ser entregues/recolhidos ----------
+const BIO_TYPES = {
+  bio18: { label: "Biologo 1-8", infinitive: "entregue" },
+  jewels: { label: "Joias", infinitive: "entregue" },
+  sixseven: { label: "6-7", infinitive: "recolhido" },
+};
+
+// Corre a cada 5 minutos: para cada timer que já terminou e ainda não foi avisado,
+// manda "✅ ... já pode ser entregue/recolhido!" e marca readyNotified (a app volta
+// a pôr isto a false quando o tempo é alterado ou o timer recomeça).
+async function runBioReadyCheck(env) {
+  const accessToken = await getGoogleAccessToken(env);
+  const projectId = env.FIREBASE_PROJECT_ID;
+  const timers = await listAllCostumes(accessToken, projectId, "bioTimers");
+  const settingsCache = new Map();
+
+  for (const timer of timers) {
+    if (!timer.endAt || !timer.ownerUid || timer.readyNotified) continue;
+    const endAt = timer.endAt instanceof Date ? timer.endAt : new Date(timer.endAt);
+    if (endAt.getTime() > Date.now()) continue;
+
+    const type = BIO_TYPES[timer.type];
+    if (!type) continue;
+
+    if (!settingsCache.has(timer.ownerUid)) {
+      try {
+        settingsCache.set(timer.ownerUid, await getUserSettingsDoc(accessToken, projectId, timer.ownerUid));
+      } catch (err) {
+        console.error(err);
+        settingsCache.set(timer.ownerUid, null);
+      }
+    }
+    const recipients = getRecipients(settingsCache.get(timer.ownerUid));
+
+    const message = `✅ ${type.label} (${timer.character}) já pode ser ${type.infinitive}!`;
+    for (const recipient of recipients) {
+      try {
+        await sendDiscordDM(env, recipient.id, message, "bio");
+      } catch (err) {
+        console.error(err.message);
+      }
+    }
+    try {
+      await patchCostume(accessToken, projectId, timer.id, { readyNotified: true }, "bioTimers");
+    } catch (err) {
+      console.error(err.message);
+    }
+  }
+}
+
 // ---------- Limpeza diária das mensagens dos bots ----------
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -337,11 +390,24 @@ function discordHeaders(token) {
 }
 
 // Pedido ao Discord que repete uma vez se bater no limite de pedidos (429).
-async function discordFetch(url, options) {
+// Cada execução do Worker só pode fazer um número limitado de pedidos externos
+// (50 no plano gratuito), por isso a limpeza usa um "orçamento" (budget) e pára
+// quando acaba — o resto fica para a execução seguinte.
+class OutOfBudgetError extends Error {}
+
+async function discordFetch(url, options, budget) {
+  const spend = () => {
+    if (budget) {
+      if (budget.left <= 0) throw new OutOfBudgetError("Limite de pedidos por execução atingido.");
+      budget.left--;
+    }
+  };
+  spend();
   let res = await fetch(url, options);
   if (res.status === 429) {
     const data = await res.json().catch(() => ({}));
     await new Promise((resolve) => setTimeout(resolve, Math.ceil((data.retry_after || 1) * 1000) + 100));
+    spend();
     res = await fetch(url, options);
   }
   return res;
@@ -349,8 +415,8 @@ async function discordFetch(url, options) {
 
 // Apaga, na DM de cada destinatário, as mensagens enviadas por ESTE bot há mais
 // de 24 horas (as mensagens de outras pessoas nunca são tocadas).
-async function deleteOldBotMessages(token, recipientIds) {
-  const meRes = await discordFetch("https://discord.com/api/v10/users/@me", { headers: discordHeaders(token) });
+async function deleteOldBotMessages(token, recipientIds, budget) {
+  const meRes = await discordFetch("https://discord.com/api/v10/users/@me", { headers: discordHeaders(token) }, budget);
   if (!meRes.ok) throw new Error(`Falha ao identificar o bot: ${await meRes.text()}`);
   const botId = (await meRes.json()).id;
   let deleted = 0;
@@ -360,15 +426,21 @@ async function deleteOldBotMessages(token, recipientIds) {
       method: "POST",
       headers: discordHeaders(token),
       body: JSON.stringify({ recipient_id: userId }),
-    });
-    if (!chRes.ok) continue;
+    }, budget);
+    if (!chRes.ok) {
+      console.error(`Limpeza: não consegui abrir a DM de ${userId}: ${chRes.status} ${await chRes.text()}`);
+      continue;
+    }
     const channel = await chRes.json();
 
     let before = null;
     for (let page = 0; page < 5; page++) {
       const url = `https://discord.com/api/v10/channels/${channel.id}/messages?limit=100${before ? `&before=${before}` : ""}`;
-      const msgRes = await discordFetch(url, { headers: discordHeaders(token) });
-      if (!msgRes.ok) break;
+      const msgRes = await discordFetch(url, { headers: discordHeaders(token) }, budget);
+      if (!msgRes.ok) {
+        console.error(`Limpeza: não consegui ler as mensagens da DM de ${userId}: ${msgRes.status} ${await msgRes.text()}`);
+        break;
+      }
       const messages = await msgRes.json();
       if (messages.length === 0) break;
 
@@ -378,8 +450,9 @@ async function deleteOldBotMessages(token, recipientIds) {
         const delRes = await discordFetch(`https://discord.com/api/v10/channels/${channel.id}/messages/${msg.id}`, {
           method: "DELETE",
           headers: discordHeaders(token),
-        });
+        }, budget);
         if (delRes.ok) deleted++;
+        else console.error(`Limpeza: falhou a apagar a mensagem ${msg.id}: ${delRes.status} ${await delRes.text()}`);
       }
       before = messages[messages.length - 1].id;
       if (messages.length < 100) break;
@@ -389,24 +462,31 @@ async function deleteOldBotMessages(token, recipientIds) {
 }
 
 async function cleanupBotMessages(env) {
+  // Orçamento de pedidos ao Discord nesta execução (o resto é feito na próxima).
+  const budget = { left: 28 };
   const accessToken = await getGoogleAccessToken(env);
   const settingsDocs = await listAllCostumes(accessToken, env.FIREBASE_PROJECT_ID, "userSettings");
   const recipientIds = [...new Set(settingsDocs.flatMap((doc) => getRecipients(doc).map((r) => r.id)))];
   if (recipientIds.length === 0) return;
 
-  for (const token of [env.DISCORD_BOT_TOKEN, env.DISCORD_REGISTRY_BOT_TOKEN]) {
+  for (const token of [env.DISCORD_BOT_TOKEN, env.DISCORD_REGISTRY_BOT_TOKEN, env.DISCORD_BIO_BOT_TOKEN]) {
     if (!token) continue;
     try {
-      const deleted = await deleteOldBotMessages(token, recipientIds);
+      const deleted = await deleteOldBotMessages(token, recipientIds, budget);
       console.log(`Limpeza: ${deleted} mensagens apagadas.`);
     } catch (err) {
+      if (err instanceof OutOfBudgetError) {
+        console.log("Limpeza: limite de pedidos atingido, continua na próxima execução.");
+        return;
+      }
       console.error("Falha na limpeza de mensagens:", err);
     }
   }
 }
 
-// O cron corre de hora a hora (em UTC); a limpeza só corre na execução que
-// corresponde à meia-noite em Portugal (ajusta-se sozinho a inverno/verão).
+// A limpeza só corre durante a hora da meia-noite em Portugal (ajusta-se sozinho
+// a inverno/verão), em várias execuções seguidas: cada uma apaga um lote e a
+// seguinte continua, por causa do limite de pedidos por execução.
 function isLisbonMidnight(date) {
   const hour = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Lisbon" }).format(date);
   return Number(hour) === 0;
@@ -443,7 +523,7 @@ export default {
     }
 
     try {
-      await sendDiscordDM(env, body.userId, body.message, body.bot === "registry" ? "registry" : "default");
+      await sendDiscordDM(env, body.userId, body.message, ["registry", "bio"].includes(body.bot) ? body.bot : "default");
     } catch (err) {
       return json(502, { error: err.message });
     }
@@ -452,8 +532,15 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runNotificationSweep(env).catch((err) => console.error("Falha na verificação agendada:", err)));
-    if (isLisbonMidnight(new Date(event.scheduledTime))) {
+    // O cron corre a cada 5 minutos: os timers de Biologo / 6-7 verificam-se sempre;
+    // o resto (trajes, pets e limpeza) só na execução do minuto 0 de cada hora.
+    ctx.waitUntil(runBioReadyCheck(env).catch((err) => console.error("Falha na verificação dos timers:", err)));
+    const scheduled = new Date(event.scheduledTime);
+    if (scheduled.getUTCMinutes() === 0) {
+      ctx.waitUntil(runNotificationSweep(env).catch((err) => console.error("Falha na verificação agendada:", err)));
+    } else if (isLisbonMidnight(scheduled)) {
+      // Fora do minuto 0 para não competir com a verificação de trajes/pets pelo
+      // limite de pedidos da mesma execução.
       ctx.waitUntil(cleanupBotMessages(env).catch((err) => console.error("Falha na limpeza diária:", err)));
     }
   },

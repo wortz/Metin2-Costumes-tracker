@@ -280,14 +280,45 @@ button.danger:hover {
   outline-offset: 2px;
 }
 
+/* Cabeçalho em 3 colunas: botão de voltar à esquerda, título ao centro, ações à direita. */
 header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
   gap: 12px;
+  /* Fica sempre visível no topo ao fazer scroll. */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+header .header-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .header-left,
+  header .header-actions {
+    justify-content: center;
+  }
+
+  .header-left:has(#back-menu-btn[hidden]) {
+    display: none;
+  }
 }
 
 .header-actions {
@@ -921,4 +952,22 @@ fieldset legend {
   font-size: 12px;
   color: var(--text-muted);
   min-height: 1em;
+}
+
+.badge.bio { background: #3a6a7c; }
+
+.remaining.ready {
+  color: var(--success);
+}
+
+.costume-card.ready {
+  border-color: var(--success);
+}
+
+#bio-subtype-label[hidden] {
+  display: none;
+}
+
+#bio-collect-delete[hidden] {
+  display: none;
 }

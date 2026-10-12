@@ -10,7 +10,7 @@ import {
   writeBatch,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { db } from "./firebase-init.js";
+import { db, snapshotError } from "./firebase-init.js";
 import { createUserWithoutSignOut } from "./firebase-init.js";
 
 // Cria um novo utilizador (só chamável pelo admin autenticado; as Firestore
@@ -30,7 +30,7 @@ export async function createUser({ email, password, displayName }) {
 // "Apagar" utilizador = desativar a conta (impede novo login) + apagar os seus trajes e pets.
 export async function disableUser(uid) {
   const batch = writeBatch(db);
-  for (const name of ["costumes", "pets"]) {
+  for (const name of ["costumes", "pets", "bioTimers"]) {
     const snap = await getDocs(query(collection(db, name), where("ownerUid", "==", uid)));
     snap.forEach((docSnap) => batch.delete(docSnap.ref));
   }
@@ -42,5 +42,5 @@ export function subscribeToUsers(onChange) {
   return onSnapshot(collection(db, "users"), (snap) => {
     const users = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
     onChange(users);
-  });
+  }, snapshotError("users"));
 }

@@ -27,3 +27,9 @@ export async function createUserWithoutSignOut(email, password) {
     await deleteApp(secondaryApp);
   }
 }
+
+// Handler de erro para os onSnapshot: diz QUAL coleção falhou (por exemplo, por
+// falta de permissões nas regras do Firestore) em vez de um erro genérico.
+export function snapshotError(label) {
+  return (err) => console.error(`Firestore: erro a ler "${label}" (${err.code}): ${err.message}`);
+}

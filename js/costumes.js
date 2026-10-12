@@ -10,7 +10,7 @@ import {
   Timestamp,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { db } from "./firebase-init.js";
+import { db, snapshotError } from "./firebase-init.js";
 import { collectionsFor } from "./kinds.js";
 
 export const COSTUME_TYPES = {
@@ -96,7 +96,7 @@ export function subscribeToOwnCostumes(ownerUid, onChange, kind = "costume") {
   return onSnapshot(q, (snap) => {
     const costumes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     onChange(costumes);
-  });
+  }, snapshotError(collectionsFor(kind).items));
 }
 
 // Usado pelo admin para contar trajes de todos os utilizadores.
@@ -104,7 +104,7 @@ export function subscribeToAllCostumes(onChange, kind = "costume") {
   return onSnapshot(collection(db, collectionsFor(kind).items), (snap) => {
     const costumes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     onChange(costumes);
-  });
+  }, snapshotError(collectionsFor(kind).items + " (todos)"));
 }
 
 // Calcula o tempo restante de um traje a partir do seu endAt (Firestore Timestamp).

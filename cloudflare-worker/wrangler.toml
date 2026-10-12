@@ -6,4 +6,8 @@ compatibility_date = "2024-01-01"
 FIREBASE_PROJECT_ID = "costumes-tracker"
 
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/5 * * * *"]
+
+# Guarda os logs do Worker no painel da Cloudflare (Workers > Logs), para se poderem consultar depois.
+[observability]
+enabled = true

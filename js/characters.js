@@ -8,7 +8,7 @@ import {
   onSnapshot,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { db } from "./firebase-init.js";
+import { db, snapshotError } from "./firebase-init.js";
 import { collectionsFor } from "./kinds.js";
 
 // Cria uma personagem vazia (sem trajes/pets ainda), para poderes organizar antes de adicionar.
@@ -30,5 +30,5 @@ export function subscribeToOwnCharacters(ownerUid, onChange, kind = "costume") {
   return onSnapshot(q, (snap) => {
     const characters = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     onChange(characters);
-  });
+  }, snapshotError(collectionsFor(kind).characters));
 }

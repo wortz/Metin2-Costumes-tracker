@@ -1,5 +1,5 @@
 import { doc, onSnapshot, setDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { db } from "./firebase-init.js";
+import { db, snapshotError } from "./firebase-init.js";
 
 export const INSTANCES = {
   meley: "Meley",
@@ -23,7 +23,7 @@ export function subscribeToRegistration(uid, onChange) {
       result[key] = ts ? { at: ts.toDate(), channel: data[`${key}Channel`] || null } : null;
     }
     onChange(result);
-  });
+  }, snapshotError("registrations"));
 }
 
 export const CHANNELS = [1, 2, 3, 4, 5, 6];

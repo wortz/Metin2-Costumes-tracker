@@ -2,7 +2,7 @@
 // ficarem sincronizadas entre dispositivos e para o Cloudflare Worker as
 // conseguir ler e enviar DMs mesmo com o site fechado.
 import { doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { db } from "./firebase-init.js";
+import { db, snapshotError } from "./firebase-init.js";
 
 export const DEFAULT_USER_SETTINGS = {
   discordRecipients: [], // [{ name, id }]
@@ -75,5 +75,5 @@ export function saveUserSettings(uid, { discordRecipients, notifyThresholdDays, 
 export function subscribeToUserSettings(uid, onChange) {
   return onSnapshot(doc(db, "userSettings", uid), (snap) => {
     onChange(normalize(snap.exists() ? snap.data() : null));
-  });
+  }, snapshotError("userSettings"));
 }
