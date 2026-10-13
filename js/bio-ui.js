@@ -6,7 +6,7 @@ import {
   changeBioTimer,
   subscribeToOwnBioTimers,
 } from "./bio.js";
-import { addCharacter, subscribeToOwnCharacters } from "./characters.js";
+import { addCharacter, deleteCharacterEverywhere, subscribeToOwnCharacters } from "./characters.js";
 import { computeRemaining, formatEndDate } from "./costumes.js";
 import { notifyBioTimer } from "./notifications.js";
 
@@ -99,7 +99,32 @@ function render() {
     addForCharacter.disabled = usedGroups(character).size >= MAX_TIMERS_PER_CHARACTER;
     addForCharacter.title = addForCharacter.disabled ? "Esta personagem já tem um Biologo e um 6-7" : "";
     addForCharacter.addEventListener("click", () => openAddModal(character));
-    header.appendChild(addForCharacter);
+
+    const delCharacter = document.createElement("button");
+    delCharacter.className = "icon-btn small";
+    delCharacter.textContent = "×";
+    delCharacter.title = "Apagar personagem";
+    delCharacter.addEventListener("click", async () => {
+      const message =
+        `Apagar a personagem "${character}"?
+
+` +
+        `Vai apagar também TUDO o que ela tem, em todos os menus: trajes, pets e os tempos do Biologo / 6-7.
+` +
+        `Não dá para desfazer.`;
+      if (!confirm(message)) return;
+      try {
+        await deleteCharacterEverywhere(ownerUid, character);
+      } catch (err) {
+        alert(err.message || "Erro ao apagar a personagem.");
+      }
+    });
+
+    const actions = document.createElement("div");
+    actions.className = "section-header-actions";
+    actions.appendChild(addForCharacter);
+    actions.appendChild(delCharacter);
+    header.appendChild(actions);
     group.appendChild(header);
 
     if (characterTimers.length === 0) {

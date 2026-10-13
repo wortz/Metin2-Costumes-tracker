@@ -23,7 +23,7 @@ import {
 } from "./sections.js";
 import {
   addCharacter,
-  deleteCharacter,
+  deleteCharacterEverywhere,
   subscribeToOwnCharacters,
   subscribeToAllCharacters,
 } from "./characters.js";
@@ -712,9 +712,6 @@ function buildCharacterGroup(character) {
   const groupEl = document.createElement("div");
   groupEl.className = "character-group";
 
-  const costumeCount = latestCostumes.filter((c) => c.character === character).length;
-  const sectionCount = latestSections.filter((s) => s.character === character).length;
-  const characterDoc = latestCharacters.find((c) => c.name === character);
 
   const header = document.createElement("div");
   header.className = "character-header";
@@ -729,19 +726,28 @@ function buildCharacterGroup(character) {
   addSectionBtn.addEventListener("click", () => openSectionModal(character));
   headerActions.appendChild(addSectionBtn);
 
-  const usedInOtherKind = Object.values(store).some((st) => st.items.some((c) => c.character === character));
-  if (characterDoc && costumeCount === 0 && sectionCount === 0 && !usedInOtherKind) {
-    const delCharBtn = document.createElement("button");
-    delCharBtn.className = "icon-btn small";
-    delCharBtn.textContent = "×";
-    delCharBtn.title = "Apagar personagem";
-    delCharBtn.addEventListener("click", () => {
-      if (confirm(`Apagar a personagem "${character}"?`)) {
-        deleteCharacter(characterDoc.id, currentKind);
-      }
-    });
-    headerActions.appendChild(delCharBtn);
-  }
+  // Apaga a personagem e tudo o que ela tem (trajes, pets e tempos do Biologo / 6-7).
+  const delCharBtn = document.createElement("button");
+  delCharBtn.className = "icon-btn small";
+  delCharBtn.textContent = "×";
+  delCharBtn.title = "Apagar personagem";
+  delCharBtn.addEventListener("click", async () => {
+    const countOf = (kind) => store[kind].items.filter((c) => c.character.toLowerCase() === character.toLowerCase()).length;
+    const message =
+      `Apagar a personagem "${character}"?
+
+` +
+      `Vai apagar também TUDO o que ela tem, em todos os menus: ${countOf("costume")} trajes, ${countOf("pet")} pets e os tempos do Biologo / 6-7.
+` +
+      `Não dá para desfazer.`;
+    if (!confirm(message)) return;
+    try {
+      await deleteCharacterEverywhere(currentUser.uid, character);
+    } catch (err) {
+      alert(err.message || "Erro ao apagar a personagem.");
+    }
+  });
+  headerActions.appendChild(delCharBtn);
 
   header.appendChild(headerActions);
   groupEl.appendChild(header);
