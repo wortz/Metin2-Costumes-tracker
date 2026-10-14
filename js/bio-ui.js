@@ -304,7 +304,7 @@ addForm.addEventListener("submit", async (e) => {
 function sendBioMessage(timer, hours, minutes, changed) {
   const type = BIO_TYPES[timer.type];
   const readyAt = new Date(Date.now() + (hours * 60 + minutes) * 60 * 1000);
-  notifyBioTimer({ label: type.label, action: type.action, character: timer.character, readyAt, changed }, getRecipients());
+  notifyBioTimer({ label: type.label, action: type.action, character: timer.character, type: timer.type, readyAt, changed }, getRecipients());
 }
 
 // ---------- Entregar (Biologo) / Recolher (6-7) ----------

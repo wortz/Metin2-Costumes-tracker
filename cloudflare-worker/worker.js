@@ -33,7 +33,7 @@ function json(status, data) {
 }
 
 // ---------- Envio de DMs no Discord (partilhado pelo fetch e pelo scheduled) ----------
-async function sendDiscordDM(env, discordUserId, message, botKey = "default") {
+async function sendDiscordDM(env, discordUserId, message, botKey = "default", tracking = null) {
   // Os registos de Meley/Balathor usam um segundo bot, para as mensagens
   // aparecerem separadas das de expiração de trajes/pets.
   const tokenNames = { default: "DISCORD_BOT_TOKEN", registry: "DISCORD_REGISTRY_BOT_TOKEN", bio: "DISCORD_BIO_BOT_TOKEN" };
@@ -60,6 +60,62 @@ async function sendDiscordDM(env, discordUserId, message, botKey = "default") {
   if (!msgRes.ok) {
     throw new Error(`Falha ao enviar mensagem: ${await msgRes.text()}`);
   }
+
+  // Se a mensagem está "associada" a um item (traje, pet, timer de Biologo / 6-7),
+  // apaga a mensagem anterior sobre o mesmo item para este destinatário e guarda
+  // a nova — assim fica sempre só a mais recente. Uma falha aqui nunca impede
+  // o envio (a mensagem nova já foi enviada).
+  if (tracking) {
+    try {
+      const sent = await msgRes.json();
+      await replacePreviousMessage(token, tracking, botKey, discordUserId, { channelId: sent.channel_id || channel.id, messageId: sent.id });
+    } catch (err) {
+      console.error("Falha a substituir a mensagem anterior:", err.message);
+    }
+  }
+}
+
+// ---------- Mensagens "substituíveis": guarda a última mensagem enviada por item ----------
+// Guardado no Firestore (coleção discordMessages, só acessível ao Worker): um registo por
+// (conta, bot, destinatário, item) com o canal e o ID da última mensagem.
+function trackingDocId(ownerUid, botKey, recipientId, key) {
+  // IDs de documentos do Firestore não podem ter "/" — o resto do texto é preservado.
+  const safeKey = key.replace(/[^A-Za-z0-9_-]/g, (c) => `~${c.charCodeAt(0).toString(16)}~`);
+  return `${ownerUid}__${botKey}__${recipientId}__${safeKey}`;
+}
+
+async function replacePreviousMessage(token, tracking, botKey, recipientId, current) {
+  const { accessToken, projectId, ownerUid, key } = tracking;
+  const docId = trackingDocId(ownerUid, botKey, recipientId, key);
+  const docUrl = `${firestoreBaseUrl(projectId)}/discordMessages/${docId}`;
+
+  let previous = null;
+  const getRes = await fetch(docUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (getRes.ok) {
+    const fields = fromFirestoreFields((await getRes.json()).fields);
+    if (fields.channelId && fields.messageId) previous = fields;
+  }
+
+  if (previous && previous.messageId !== current.messageId) {
+    // Se já foi apagada (por exemplo, pela limpeza diária) o Discord devolve 404 — sem problema.
+    await fetch(`https://discord.com/api/v10/channels/${previous.channelId}/messages/${previous.messageId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bot ${token}` },
+    });
+  }
+
+  await fetch(docUrl, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fields: {
+        ownerUid: toFirestoreValue(ownerUid),
+        channelId: toFirestoreValue(current.channelId),
+        messageId: toFirestoreValue(current.messageId),
+        sentAt: toFirestoreValue(new Date()),
+      },
+    }),
+  });
 }
 
 // ---------- Verificação do login Firebase (usado pelo pedido de teste) ----------
@@ -79,7 +135,14 @@ async function verifyFirebaseIdToken(idToken, projectId) {
 }
 
 // ---------- Acesso ao Firestore com credenciais de serviço (Admin) ----------
+// O token da Google dura 1 hora: guarda-se em memória para não pedir um novo a cada
+// execução (poupa pedidos externos, que têm limite por execução).
+let cachedGoogleToken = null;
+
 async function getGoogleAccessToken(env) {
+  if (cachedGoogleToken && cachedGoogleToken.expiresAt - Date.now() > 5 * 60 * 1000) {
+    return cachedGoogleToken.token;
+  }
   const privateKeyPem = env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n");
   const privateKey = await importPKCS8(privateKeyPem, "RS256");
   const now = Math.floor(Date.now() / 1000);
@@ -105,6 +168,7 @@ async function getGoogleAccessToken(env) {
     throw new Error(`Falha ao autenticar com a Google: ${await res.text()}`);
   }
   const data = await res.json();
+  cachedGoogleToken = { token: data.access_token, expiresAt: Date.now() + (data.expires_in || 3600) * 1000 };
   return data.access_token;
 }
 
@@ -270,6 +334,9 @@ async function runNotificationSweep(env) {
   ];
   const settingsCache = new Map();
   const summary = { totalCostumes: costumes.length, sent: [], skipped: [], errors: [] };
+  // Pedidos externos disponíveis nesta execução (cada envio com substituição gasta ~5 por
+  // destinatário). O que não couber fica por avisar e é feito na execução seguinte.
+  const budget = { left: 30 };
 
   for (const costume of costumes) {
     if (!costume.endAt || !costume.ownerUid) {
@@ -284,6 +351,7 @@ async function runNotificationSweep(env) {
     }
 
     if (!settingsCache.has(costume.ownerUid)) {
+      budget.left -= 1;
       try {
         settingsCache.set(costume.ownerUid, await getUserSettingsDoc(accessToken, projectId, costume.ownerUid));
       } catch (err) {
@@ -324,6 +392,13 @@ async function runNotificationSweep(env) {
       continue;
     }
 
+    const needed = 1 + recipients.length * 5;
+    if (needed > budget.left) {
+      summary.skipped.push({ id: costume.id, reason: "limite de pedidos desta execução; fica para a próxima" });
+      continue;
+    }
+    budget.left -= needed;
+
     // Reserva o aviso ANTES de enviar: se o site (ou outra execução) o reservou entretanto,
     // a escrita falha e não se envia — assim nunca há mensagens duplicadas.
     let claimed;
@@ -347,9 +422,11 @@ async function runNotificationSweep(env) {
 
     const message = discordAlertMessage(costume, stage, remainingMs, endAt);
     const failures = [];
+    // A mensagem nova substitui a anterior sobre este mesmo traje/pet (key = tipo + id).
+    const tracking = { accessToken, projectId, ownerUid: costume.ownerUid, key: `${costume._kind}:${costume.id}` };
     for (const recipient of recipients) {
       try {
-        await sendDiscordDM(env, recipient.id, message);
+        await sendDiscordDM(env, recipient.id, message, "default", tracking);
       } catch (err) {
         failures.push(err.message);
       }
@@ -376,6 +453,9 @@ async function runBioReadyCheck(env) {
   const projectId = env.FIREBASE_PROJECT_ID;
   const timers = await listAllCostumes(accessToken, projectId, "bioTimers");
   const settingsCache = new Map();
+  // Poucos pedidos por execução (partilha o limite com o varrimento de trajes/pets, que
+  // corre na mesma execução de hora a hora); o que não couber é avisado 5 minutos depois.
+  const budget = { left: 12 };
 
   for (const timer of timers) {
     if (!timer.endAt || !timer.ownerUid || timer.readyNotified) continue;
@@ -386,6 +466,7 @@ async function runBioReadyCheck(env) {
     if (!type) continue;
 
     if (!settingsCache.has(timer.ownerUid)) {
+      budget.left -= 1;
       try {
         settingsCache.set(timer.ownerUid, await getUserSettingsDoc(accessToken, projectId, timer.ownerUid));
       } catch (err) {
@@ -394,6 +475,10 @@ async function runBioReadyCheck(env) {
       }
     }
     const recipients = getRecipients(settingsCache.get(timer.ownerUid));
+
+    const needed = 1 + recipients.length * 5;
+    if (needed > budget.left) continue; // fica para a próxima execução (5 minutos depois)
+    budget.left -= needed;
 
     // Reserva o aviso antes de enviar (se o timer mudou entretanto, não envia).
     try {
@@ -405,9 +490,16 @@ async function runBioReadyCheck(env) {
     }
 
     const message = `✅ ${type.label} (${timer.character}) já pode ser ${type.infinitive}!`;
+    // Substitui a mensagem anterior sobre este mesmo timer (mesma personagem e tipo).
+    const tracking = {
+      accessToken,
+      projectId,
+      ownerUid: timer.ownerUid,
+      key: `bio:${String(timer.character).toLowerCase()}:${timer.type}`,
+    };
     for (const recipient of recipients) {
       try {
-        await sendDiscordDM(env, recipient.id, message, "bio");
+        await sendDiscordDM(env, recipient.id, message, "bio", tracking);
       } catch (err) {
         console.error(err.message);
       }
@@ -545,8 +637,9 @@ export default {
       return json(401, { error: "Sem sessão (idToken em falta)." });
     }
 
+    let payload;
     try {
-      await verifyFirebaseIdToken(body.idToken, env.FIREBASE_PROJECT_ID);
+      payload = await verifyFirebaseIdToken(body.idToken, env.FIREBASE_PROJECT_ID);
     } catch (err) {
       return json(401, { error: `Sessão inválida: ${err.message}` });
     }
@@ -556,7 +649,18 @@ export default {
     }
 
     try {
-      await sendDiscordDM(env, body.userId, body.message, ["registry", "bio"].includes(body.bot) ? body.bot : "default");
+      // "key" (opcional) identifica o item da mensagem; a anterior com a mesma key é apagada.
+      // A conta é a do token verificado, por isso cada pessoa só mexe nas suas mensagens.
+      let tracking = null;
+      if (typeof body.key === "string" && body.key && body.key.length <= 200) {
+        tracking = {
+          accessToken: await getGoogleAccessToken(env),
+          projectId: env.FIREBASE_PROJECT_ID,
+          ownerUid: payload.sub,
+          key: body.key,
+        };
+      }
+      await sendDiscordDM(env, body.userId, body.message, ["registry", "bio"].includes(body.bot) ? body.bot : "default", tracking);
     } catch (err) {
       return json(502, { error: err.message });
     }

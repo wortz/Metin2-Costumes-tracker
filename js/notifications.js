@@ -38,7 +38,9 @@ export function requestNotificationPermission() {
 // não há nenhum segredo para partilhar/colar, o Worker confia em quem já está
 // autenticado nesta app. Devolve { ok, error } em vez de lançar, para a UI
 // poder mostrar o motivo da falha.
-export async function sendDiscordDM(userId, message, bot = "default") {
+// "key" (opcional) identifica o item a que a mensagem diz respeito: o Worker apaga a
+// mensagem anterior com a mesma key para este destinatário e deixa só a nova.
+export async function sendDiscordDM(userId, message, bot = "default", key = null) {
   if (!auth.currentUser) {
     return { ok: false, error: "Não estás autenticado." };
   }
@@ -47,7 +49,7 @@ export async function sendDiscordDM(userId, message, bot = "default") {
     const res = await fetch(DISCORD_DM_WORKER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken, userId, message, bot }),
+      body: JSON.stringify({ idToken, userId, message, bot, key }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -112,14 +114,16 @@ Próximo registo possível a ${formatDiscordEndDate(nextAt)}`;
 
 // Avisa os destinatários (3.º bot) de que um timer de Biologo / 6-7 foi entregue/
 // recolhido ou teve o tempo alterado, com a hora a que já pode ser entregue/recolhido.
-export function notifyBioTimer({ label, action, character, readyAt, changed }, recipients) {
+export function notifyBioTimer({ label, action, character, type, readyAt, changed }, recipients) {
   if (!recipients || recipients.length === 0) return Promise.resolve([]);
   const past = action === "Entregar" ? "entregue" : "recolhido";
   const first = changed ? `⏳ Tempo do ${label} (${character}) alterado.` : `⏳ ${label} (${character}) ${past}.`;
   const second = changed
     ? `Pode ser ${past} a ${formatDiscordEndDate(readyAt)}`
     : `Pode ser ${past} novamente a ${formatDiscordEndDate(readyAt)}`;
-  return Promise.all(recipients.map((r) => sendDiscordDM(r.id, `${first}\n${second}`, "bio")));
+  // Substitui a mensagem anterior sobre o mesmo timer (mesma personagem e tipo).
+  const key = `bio:${character.toLowerCase()}:${type}`;
+  return Promise.all(recipients.map((r) => sendDiscordDM(r.id, `${first}\n${second}`, "bio", key)));
 }
 
 // Avisa todos os destinatários do Discord de que um traje foi renovado, com o
@@ -135,7 +139,8 @@ export function notifyCostumeRenewed(costume, { daysLeft, hoursLeft, minutesLeft
   const endDate = new Date(Date.now() + ((days * 24 + hours) * 60 + minutes) * 60 * 1000);
   const descPart = costume.description ? ` (${costume.description})` : "";
   const message = `✅ ${itemLabel(costume, kind)} do personagem ${costume.character}${descPart} renovado - novo tempo: ${days}d ${hours}h ${minutes}m - ${formatDiscordEndDate(endDate)}`;
-  for (const recipient of recipients) sendDiscordDM(recipient.id, message);
+  // Substitui o aviso de expiração anterior deste traje/pet (mesma key que o Worker usa).
+  for (const recipient of recipients) sendDiscordDM(recipient.id, message, "default", `${kind}:${costume.id}`);
 }
 
 // Notificações do browser: um único limiar (definido pelo utilizador), que
