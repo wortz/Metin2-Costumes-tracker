@@ -553,14 +553,29 @@ async function discordFetch(url, options, budget) {
   return res;
 }
 
+// Extrai o ID do bot do token (ex.: "MTIz….xxxx.yyyy" -> base64("123…")). Devolve null se não
+// tiver o formato esperado (um ID numérico do Discord).
+function botIdFromToken(token) {
+  try {
+    const part = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    const id = atob(part);
+    return /^\d{15,25}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 // Apaga, na DM de cada destinatário, as mensagens enviadas por ESTE bot há mais
 // de 24 horas (as mensagens de outras pessoas nunca são tocadas).
-async function deleteOldBotMessages(token, recipientIds, budget) {
-  const meRes = await discordFetch("https://discord.com/api/v10/users/@me", { headers: discordHeaders(token) }, budget);
-  if (!meRes.ok) throw new Error(`Falha ao identificar o bot: ${await meRes.text()}`);
-  const botId = (await meRes.json()).id;
-  let deleted = 0;
-
+async function deleteOldBotMessages(token, recipientIds, budget, stats) {
+  // O ID do bot está no próprio token (a primeira parte é o ID em base64), por isso
+  // não é preciso gastar um pedido ao Discord; só se o formato for inesperado se pergunta.
+  let botId = botIdFromToken(token);
+  if (!botId) {
+    const meRes = await discordFetch("https://discord.com/api/v10/users/@me", { headers: discordHeaders(token) }, budget);
+    if (!meRes.ok) throw new Error(`Falha ao identificar o bot: ${await meRes.text()}`);
+    botId = (await meRes.json()).id;
+  }
   for (const userId of recipientIds) {
     const chRes = await discordFetch("https://discord.com/api/v10/users/@me/channels", {
       method: "POST",
@@ -591,35 +606,42 @@ async function deleteOldBotMessages(token, recipientIds, budget) {
           method: "DELETE",
           headers: discordHeaders(token),
         }, budget);
-        if (delRes.ok) deleted++;
+        if (delRes.ok) stats.deleted++;
         else console.error(`Limpeza: falhou a apagar a mensagem ${msg.id}: ${delRes.status} ${await delRes.text()}`);
       }
       before = messages[messages.length - 1].id;
       if (messages.length < 100) break;
     }
   }
-  return deleted;
 }
 
 async function cleanupBotMessages(env) {
-  // Orçamento de pedidos ao Discord nesta execução (o resto é feito na próxima).
-  const budget = { left: 28 };
   const accessToken = await getGoogleAccessToken(env);
   const settingsDocs = await listAllCostumes(accessToken, env.FIREBASE_PROJECT_ID, "userSettings");
   const recipientIds = [...new Set(settingsDocs.flatMap((doc) => getRecipients(doc).map((r) => r.id)))];
   if (recipientIds.length === 0) return;
 
-  for (const token of [env.DISCORD_BOT_TOKEN, env.DISCORD_REGISTRY_BOT_TOKEN, env.DISCORD_BIO_BOT_TOKEN]) {
+  // Cada bot tem o SEU orçamento de pedidos (em vez de partilharem um só): se tivessem um
+  // só, o primeiro bot da lista com muitas mensagens antigas gastava tudo e os últimos
+  // nunca chegavam a ser limpos. O que não couber fica para a execução seguinte.
+  const BUDGET_PER_BOT = 12;
+  const bots = [
+    ["trajes e pets", env.DISCORD_BOT_TOKEN],
+    ["registos", env.DISCORD_REGISTRY_BOT_TOKEN],
+    ["Biologo / 6-7", env.DISCORD_BIO_BOT_TOKEN],
+  ];
+  for (const [name, token] of bots) {
     if (!token) continue;
+    const stats = { deleted: 0 };
     try {
-      const deleted = await deleteOldBotMessages(token, recipientIds, budget);
-      console.log(`Limpeza: ${deleted} mensagens apagadas.`);
+      await deleteOldBotMessages(token, recipientIds, { left: BUDGET_PER_BOT }, stats);
+      console.log(`Limpeza (${name}): ${stats.deleted} mensagens apagadas.`);
     } catch (err) {
       if (err instanceof OutOfBudgetError) {
-        console.log("Limpeza: limite de pedidos atingido, continua na próxima execução.");
-        return;
+        console.log(`Limpeza (${name}): ${stats.deleted} mensagens apagadas; limite de pedidos atingido, continua na próxima execução.`);
+        continue;
       }
-      console.error("Falha na limpeza de mensagens:", err);
+      console.error(`Falha na limpeza de mensagens (${name}):`, err);
     }
   }
 }
@@ -688,7 +710,7 @@ export default {
     // o resto (trajes, pets e limpeza) só na execução do minuto 0 de cada hora.
     const scheduled = new Date(event.scheduledTime);
     // Orçamento de pedidos do Biologo / 6-7 conforme o que mais corre nesta execução.
-    const bioBudget = scheduled.getUTCMinutes() === 0 ? 12 : isLisbonMidnight(scheduled) ? 16 : 40;
+    const bioBudget = scheduled.getUTCMinutes() === 0 ? 12 : isLisbonMidnight(scheduled) ? 8 : 40;
     ctx.waitUntil(runBioReadyCheck(env, bioBudget).catch((err) => console.error("Falha na verificação dos timers:", err)));
     if (scheduled.getUTCMinutes() === 0) {
       ctx.waitUntil(runNotificationSweep(env).catch((err) => console.error("Falha na verificação agendada:", err)));
