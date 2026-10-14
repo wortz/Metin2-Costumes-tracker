@@ -126,6 +126,15 @@ export function notifyBioTimer({ label, action, character, type, readyAt, change
   return Promise.all(recipients.map((r) => sendDiscordDM(r.id, `${first}\n${second}`, "bio", key)));
 }
 
+// 6-7 recolhido e apagado (sem novo tempo): substitui a mensagem anterior sobre este timer.
+export function notifyBioCollected({ label, character, type }, recipients) {
+  if (!recipients || recipients.length === 0) return Promise.resolve([]);
+  const message = `📦 ${label} (${character}) recolhido.
+Timer apagado.`;
+  const key = `bio:${character.toLowerCase()}:${type}`;
+  return Promise.all(recipients.map((r) => sendDiscordDM(r.id, message, "bio", key)));
+}
+
 // Avisa todos os destinatários do Discord de que um traje foi renovado, com o
 // novo tempo de duração e a nova data de fim. Só avisa se o traje já tinha
 // disparado algum aviso no Discord (ou seja, se as pessoas já sabiam que

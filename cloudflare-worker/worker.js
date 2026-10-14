@@ -94,17 +94,22 @@ async function replacePreviousMessage(token, tracking, botKey, recipientId, curr
   if (getRes.ok) {
     const fields = fromFirestoreFields((await getRes.json()).fields);
     if (fields.channelId && fields.messageId) previous = fields;
+  } else if (getRes.status !== 404) {
+    console.error(`Substituição: falha a ler o registo (${getRes.status}): ${await getRes.text()}`);
   }
 
   if (previous && previous.messageId !== current.messageId) {
     // Se já foi apagada (por exemplo, pela limpeza diária) o Discord devolve 404 — sem problema.
-    await fetch(`https://discord.com/api/v10/channels/${previous.channelId}/messages/${previous.messageId}`, {
+    const delRes = await fetch(`https://discord.com/api/v10/channels/${previous.channelId}/messages/${previous.messageId}`, {
       method: "DELETE",
       headers: { Authorization: `Bot ${token}` },
     });
+    if (!delRes.ok && delRes.status !== 404) {
+      console.error(`Substituição: falha a apagar a mensagem anterior (${delRes.status}): ${await delRes.text()}`);
+    }
   }
 
-  await fetch(docUrl, {
+  const saveRes = await fetch(docUrl, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -116,6 +121,9 @@ async function replacePreviousMessage(token, tracking, botKey, recipientId, curr
       },
     }),
   });
+  if (!saveRes.ok) {
+    console.error(`Substituição: falha a guardar o registo (${saveRes.status}): ${await saveRes.text()}`);
+  }
 }
 
 // ---------- Verificação do login Firebase (usado pelo pedido de teste) ----------

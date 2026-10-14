@@ -8,7 +8,7 @@ import {
 } from "./bio.js";
 import { addCharacter, deleteCharacterEverywhere, subscribeToOwnCharacters } from "./characters.js";
 import { computeRemaining, formatEndDate } from "./costumes.js";
-import { notifyBioTimer } from "./notifications.js";
+import { notifyBioTimer, notifyBioCollected } from "./notifications.js";
 
 const listEl = document.getElementById("bio-list");
 const addBtn = document.getElementById("bio-add-btn");
@@ -354,7 +354,9 @@ collectNewBtn.addEventListener("click", async () => {
 
 collectDeleteBtn.addEventListener("click", async () => {
   try {
-    await deleteBioTimer(collectingTimer.id);
+    const timer = collectingTimer;
+    await deleteBioTimer(timer.id);
+    notifyBioCollected({ label: BIO_TYPES[timer.type].label, character: timer.character, type: timer.type }, getRecipients());
     collectModal.close();
   } catch (err) {
     collectError.textContent = err.message || "Erro ao apagar o tempo.";
