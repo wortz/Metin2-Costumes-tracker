@@ -345,6 +345,7 @@ async function runNotificationSweep(env) {
   // Pedidos externos disponíveis nesta execução (cada envio com substituição gasta ~5 por
   // destinatário). O que não couber fica por avisar e é feito na execução seguinte.
   const budget = { left: 30 };
+  let processed = 0;
 
   for (const costume of costumes) {
     if (!costume.endAt || !costume.ownerUid) {
@@ -401,11 +402,13 @@ async function runNotificationSweep(env) {
     }
 
     const needed = 1 + recipients.length * 5;
-    if (needed > budget.left) {
+    // O primeiro aviso é sempre enviado (mesmo com muitos destinatários); os seguintes só se couberem.
+    if (needed > budget.left && processed > 0) {
       summary.skipped.push({ id: costume.id, reason: "limite de pedidos desta execução; fica para a próxima" });
       continue;
     }
     budget.left -= needed;
+    processed++;
 
     // Reserva o aviso ANTES de enviar: se o site (ou outra execução) o reservou entretanto,
     // a escrita falha e não se envia — assim nunca há mensagens duplicadas.
@@ -456,14 +459,17 @@ const BIO_TYPES = {
 // Corre a cada 5 minutos: para cada timer que já terminou e ainda não foi avisado,
 // manda "✅ ... já pode ser entregue/recolhido!" e marca readyNotified (a app volta
 // a pôr isto a false quando o tempo é alterado ou o timer recomeça).
-async function runBioReadyCheck(env) {
+async function runBioReadyCheck(env, budgetLeft = 40) {
   const accessToken = await getGoogleAccessToken(env);
   const projectId = env.FIREBASE_PROJECT_ID;
   const timers = await listAllCostumes(accessToken, projectId, "bioTimers");
   const settingsCache = new Map();
-  // Poucos pedidos por execução (partilha o limite com o varrimento de trajes/pets, que
-  // corre na mesma execução de hora a hora); o que não couber é avisado 5 minutos depois.
-  const budget = { left: 12 };
+  // Pedidos externos disponíveis nesta execução (o limite é 50; nas execuções em que corre
+  // também o varrimento de trajes/pets ou a limpeza, este valor é mais pequeno). O que não
+  // couber é avisado 5 minutos depois — mas o primeiro aviso de cada execução é sempre
+  // enviado, mesmo que precise de mais, para nunca ficar preso por ter muitos destinatários.
+  const budget = { left: budgetLeft };
+  let processed = 0;
 
   for (const timer of timers) {
     if (!timer.endAt || !timer.ownerUid || timer.readyNotified) continue;
@@ -485,8 +491,9 @@ async function runBioReadyCheck(env) {
     const recipients = getRecipients(settingsCache.get(timer.ownerUid));
 
     const needed = 1 + recipients.length * 5;
-    if (needed > budget.left) continue; // fica para a próxima execução (5 minutos depois)
+    if (needed > budget.left && processed > 0) continue; // fica para a próxima execução (5 minutos depois)
     budget.left -= needed;
+    processed++;
 
     // Reserva o aviso antes de enviar (se o timer mudou entretanto, não envia).
     try {
@@ -679,8 +686,10 @@ export default {
   async scheduled(event, env, ctx) {
     // O cron corre a cada 5 minutos: os timers de Biologo / 6-7 verificam-se sempre;
     // o resto (trajes, pets e limpeza) só na execução do minuto 0 de cada hora.
-    ctx.waitUntil(runBioReadyCheck(env).catch((err) => console.error("Falha na verificação dos timers:", err)));
     const scheduled = new Date(event.scheduledTime);
+    // Orçamento de pedidos do Biologo / 6-7 conforme o que mais corre nesta execução.
+    const bioBudget = scheduled.getUTCMinutes() === 0 ? 12 : isLisbonMidnight(scheduled) ? 16 : 40;
+    ctx.waitUntil(runBioReadyCheck(env, bioBudget).catch((err) => console.error("Falha na verificação dos timers:", err)));
     if (scheduled.getUTCMinutes() === 0) {
       ctx.waitUntil(runNotificationSweep(env).catch((err) => console.error("Falha na verificação agendada:", err)));
     } else if (isLisbonMidnight(scheduled)) {

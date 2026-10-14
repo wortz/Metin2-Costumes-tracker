@@ -684,8 +684,30 @@ function byRemaining(a, b) {
   return computeRemaining(a.endAt).totalMs - computeRemaining(b.endAt).totalMs;
 }
 
+// Aviso do atraso das DMs de expiração: o Worker verifica trajes e pets de hora a hora.
+const dmDelayHintEl = document.getElementById("dm-delay-hint");
+
+// Hora no fuso do próprio browser (sem indicar PT/CZ).
+function formatClock(date) {
+  return date.toLocaleString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderDmDelayHint() {
+  if (latestUserSettings.discordRecipients.length === 0) {
+    dmDelayHintEl.hidden = true;
+    return;
+  }
+  const next = new Date();
+  next.setUTCMinutes(0, 0, 0);
+  next.setUTCHours(next.getUTCHours() + 1);
+  dmDelayHintEl.hidden = false;
+  dmDelayHintEl.textContent =
+    `⏱ Os avisos no Discord são enviados de hora a hora. Próxima verificação por volta das ${formatClock(next)}.`;
+}
+
 function renderCostumes() {
   renderExpiryBanner();
+  renderDmDelayHint();
   listTitleEl.textContent = `${kindText().title} (${latestCostumes.length}/${itemLimit()})`;
   costumesListEl.innerHTML = "";
 

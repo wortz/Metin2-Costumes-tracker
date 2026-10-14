@@ -1005,3 +1005,13 @@ fieldset legend {
 .update-banner button:hover {
   background: #eee;
 }
+
+.dm-delay-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.dm-delay-hint[hidden] {
+  display: none;
+}
