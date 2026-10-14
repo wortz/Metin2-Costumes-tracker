@@ -46,6 +46,7 @@ import {
 import { notifyRegistration } from "./notifications.js";
 import { startBio } from "./bio-ui.js";
 import { limitsFor } from "./limits.js";
+import { startUpdateCheck } from "./update-check.js";
 import { DISCORD_OAUTH_CLIENT_ID } from "./settings.js";
 import { DEFAULT_USER_SETTINGS, getUserSettings, saveUserSettings, subscribeToUserSettings } from "./user-settings.js";
 
@@ -1557,3 +1558,6 @@ for (const dialog of document.querySelectorAll("dialog")) {
     pressedOutside = false;
   });
 }
+
+// Avisa quando há uma versão nova da app.
+startUpdateCheck();

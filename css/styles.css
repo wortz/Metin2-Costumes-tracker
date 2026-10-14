@@ -977,3 +977,31 @@ fieldset legend {
 .users-list td:nth-child(n+3):nth-child(-n+6) {
   text-align: center;
 }
+
+/* Faixa "há uma nova versão" */
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.update-banner button {
+  background: white;
+  color: var(--accent);
+  padding: 4px 12px;
+}
+
+.update-banner button:hover {
+  background: #eee;
+}
