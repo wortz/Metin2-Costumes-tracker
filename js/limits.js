@@ -8,7 +8,7 @@ export const BASE_LIMITS = {
 
 export const PRIVILEGED_LIMITS = {
   characters: 10,
-  costumes: 25,
+  costumes: 50,
   pets: 10,
 };
 
