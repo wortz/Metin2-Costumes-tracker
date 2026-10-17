@@ -58,9 +58,10 @@ const loginForm = document.getElementById("login-form");
 const loginError = document.getElementById("login-error");
 const logoutBtn = document.getElementById("logout-btn");
 const userEmailEl = document.getElementById("user-email");
-const backMenuBtn = document.getElementById("back-menu-btn");
-const menuViewEl = document.getElementById("menu-view");
-const menuAdminTile = document.getElementById("menu-admin-tile");
+const navEl = document.getElementById("sidebar");
+const navAdmin = document.getElementById("nav-admin");
+const appViewEl = document.getElementById("app-view");
+const registryViewEl = document.getElementById("registry-view");
 const listTitleEl = document.getElementById("list-title");
 const costumesViewEl = document.getElementById("costumes-view");
 const adminViewEl = document.getElementById("admin-view");
@@ -186,8 +187,9 @@ onAuthChange((user, err) => {
   userEmailEl.textContent = user.displayName;
 
   const admin = isAdmin();
-  menuAdminTile.hidden = !admin;
-  showView("menu");
+  navAdmin.hidden = !admin;
+  // Abre na última página em que o utilizador estava (guardada num cookie).
+  navigate(readPageCookie() || "costume");
 
   for (const kind of ["costume", "pet"]) {
     unsubscribers.push(
@@ -321,31 +323,60 @@ function kindText() {
   return KIND_TEXT[currentKind];
 }
 
-function showView(view) {
-  menuViewEl.hidden = view !== "menu";
-  costumesViewEl.hidden = view !== "list";
-  adminViewEl.hidden = view !== "admin";
-  bioViewEl.hidden = view !== "bio";
-  backMenuBtn.hidden = view === "menu";
+// ---------- Navegação (barra lateral) ----------
+const PAGES = ["costume", "pet", "bio", "registos", "admin"];
+const PAGE_COOKIE = "timers_page";
+let currentPage = null;
+
+// A página atual fica guardada num cookie (1 ano), só para este site.
+function readPageCookie() {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${PAGE_COOKIE}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
-function openKind(kind) {
-  currentKind = kind;
-  syncCurrentKind();
-  addCostumeBtn.textContent = kindText().add;
-  showView("list");
-  renderCostumes();
+function savePageCookie(page) {
+  const path = location.pathname.replace(/[^/]*$/, "") || "/";
+  document.cookie = `${PAGE_COOKIE}=${encodeURIComponent(page)}; max-age=31536000; path=${path}; SameSite=Lax`;
 }
 
-menuViewEl.addEventListener("click", (e) => {
-  const tile = e.target.closest(".menu-tile");
-  if (!tile) return;
-  if (tile.dataset.open === "admin") showView("admin");
-  else if (tile.dataset.open === "bio") showView("bio");
-  else openKind(tile.dataset.open);
+function closeSidebar() {
+  appViewEl.classList.remove("sidebar-open");
+}
+
+function navigate(page) {
+  if (!PAGES.includes(page) || (page === "admin" && !isAdmin())) page = "costume";
+  currentPage = page;
+
+  const isList = page === "costume" || page === "pet";
+  if (isList) {
+    currentKind = page;
+    syncCurrentKind();
+    addCostumeBtn.textContent = kindText().add;
+  }
+  costumesViewEl.hidden = !isList;
+  bioViewEl.hidden = page !== "bio";
+  registryViewEl.hidden = page !== "registos";
+  adminViewEl.hidden = page !== "admin";
+
+  for (const item of navEl.querySelectorAll(".nav-item[data-page]")) {
+    item.classList.toggle("active", item.dataset.page === page);
+  }
+  savePageCookie(page);
+  closeSidebar();
+  if (isList) renderCostumes();
+}
+
+navEl.addEventListener("click", (e) => {
+  const item = e.target.closest(".nav-item[data-page]");
+  if (item) navigate(item.dataset.page);
 });
 
-backMenuBtn.addEventListener("click", () => showView("menu"));
+// Em ecrãs pequenos a barra lateral abre e fecha com o botão ☰.
+document.getElementById("sidebar-toggle").addEventListener("click", () => appViewEl.classList.toggle("sidebar-open"));
+document.getElementById("sidebar-backdrop").addEventListener("click", closeSidebar);
+document.getElementById("sidebar").addEventListener("click", (e) => {
+  if (e.target.closest("#open-settings-btn, #logout-btn")) closeSidebar();
+});
 
 // Personagens conhecidas da conta (partilhadas por trajes, pets e Biologo / 6-7), sem repetir.
 function knownCharacterNames() {
