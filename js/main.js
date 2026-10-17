@@ -1061,27 +1061,34 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 // Quanto tempo a bolinha dos registos fica acesa depois de passarem as 3 horas.
 const REGISTRY_BADGE_WINDOW_MS = 3 * 60 * 60 * 1000;
 
-function setNavBadge(page, count, title) {
+// type "alert" = bolinha vermelha; "warning" = bolinha amarela (só nos Trajes e Pets).
+function setNavBadge(page, count, title, type = "alert") {
   const item = navEl.querySelector(`.nav-item[data-page="${page}"]`);
-  const badge = item?.querySelector(".nav-badge");
+  const badge = item?.querySelector(type === "warning" ? ".nav-badge-warning" : ".nav-badge:not(.nav-badge-warning)");
   if (!badge) return;
   badge.hidden = count <= 0;
   badge.textContent = count > 99 ? "99+" : String(count);
-  item.title = count > 0 ? title : "";
+  badge.title = count > 0 ? title : "";
 }
 
-// Trajes e pets: conta os que já expiraram ou estão dentro do limite de "Alerta" das configurações.
+// Trajes e pets: bolinha vermelha = já expiraram ou estão dentro do limite de "Alerta" das
+// configurações; bolinha amarela = estão dentro do limite de "Aviso" (os de borda amarela),
+// sem contar os que já estão na vermelha.
 function updateNavBadges() {
   const alertMs = latestUserSettings.alertThresholdDays * ONE_DAY_MS;
-  const countUrgent = (items) =>
-    items.filter((item) => {
-      const remaining = computeRemaining(item.endAt);
-      return remaining.expired || remaining.totalMs <= alertMs;
-    }).length;
+  const warningMs = latestUserSettings.warningThresholdDays * ONE_DAY_MS;
 
   for (const [kind, page, noun] of [["costume", "costume", "traje"], ["pet", "pet", "pet"]]) {
-    const count = countUrgent(store[kind].items);
-    setNavBadge(page, count, `${count} ${noun}${count === 1 ? "" : "s"} a expirar ou já expirado${count === 1 ? "" : "s"}`);
+    let urgent = 0;
+    let warning = 0;
+    for (const item of store[kind].items) {
+      const remaining = computeRemaining(item.endAt);
+      if (remaining.expired || remaining.totalMs <= alertMs) urgent++;
+      else if (remaining.totalMs <= warningMs) warning++;
+    }
+    const plural = (n) => (n === 1 ? "" : "s");
+    setNavBadge(page, urgent, `${urgent} ${noun}${plural(urgent)} a expirar ou já expirado${plural(urgent)}`);
+    setNavBadge(page, warning, `${warning} ${noun}${plural(warning)} com menos de ${latestUserSettings.warningThresholdDays} dias`, "warning");
   }
 
   // Registos: instâncias em que já passaram as 3 horas do registo, mas só durante

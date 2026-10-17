@@ -1045,3 +1045,14 @@ fieldset legend {
 .nav-badge[hidden] {
   display: none;
 }
+
+/* Bolinha amarela (aviso), à esquerda da vermelha */
+.nav-badge-warning {
+  background: var(--warning);
+  color: #1b1e2b;
+}
+
+/* O gap do botão (10px) já separa as duas; -4px deixa 6px entre elas. */
+.nav-badge-warning:not([hidden]) + .nav-badge {
+  margin-left: -4px;
+}
