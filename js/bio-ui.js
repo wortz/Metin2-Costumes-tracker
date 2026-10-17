@@ -36,6 +36,7 @@ let characters = [];
 let getExtraCharacterNames = () => [];
 let getRecipients = () => [];
 let getLimits = () => ({ characters: 5 });
+let onReadyCount = () => {};
 let editingTimer = null;
 
 function escapeHtml(str) {
@@ -76,7 +77,13 @@ function timersOf(character) {
 }
 
 // ---------- Render ----------
+// Quantos timers já terminaram (prontos a entregar/recolher): vai para a bolinha da barra lateral.
+function reportReadyCount() {
+  onReadyCount(timers.filter((t) => computeRemaining(t.endAt).expired).length);
+}
+
 function render() {
+  reportReadyCount();
   listEl.innerHTML = "";
   const names = allCharacterNames();
 
@@ -397,8 +404,9 @@ timeForm.addEventListener("submit", async (e) => {
 // ---------- Ligação à app ----------
 // Chamado no login; devolve a função que pára as subscrições. getExtraNames
 // devolve personagens que só existem nos trajes/pets (para também aparecerem aqui).
-export function startBio(user, getExtraNames, getRecipientsFn, getLimitsFn) {
+export function startBio(user, getExtraNames, getRecipientsFn, getLimitsFn, onReadyCountFn) {
   ownerUid = user.uid;
+  onReadyCount = onReadyCountFn || onReadyCount;
   getLimits = getLimitsFn || getLimits;
   getRecipients = getRecipientsFn || (() => []);
   getExtraCharacterNames = getExtraNames || (() => []);
@@ -419,6 +427,7 @@ export function startBio(user, getExtraNames, getRecipientsFn, getLimitsFn) {
     timers = [];
     characters = [];
     ownerUid = null;
+    onReadyCount(0);
     listEl.innerHTML = "";
   };
 }

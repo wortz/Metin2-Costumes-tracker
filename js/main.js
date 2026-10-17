@@ -217,7 +217,8 @@ onAuthChange((user, err) => {
     startBio(user, () =>
       Object.values(store).flatMap((st) => [...st.characters.map((c) => c.name), ...st.items.map((c) => c.character)]),
     () => latestUserSettings.discordRecipients,
-    () => userLimits()
+    () => userLimits(),
+    (count) => setNavBadge("bio", count, `${count} pronto${count === 1 ? "" : "s"} para entregar / recolher`)
     )
   );
 
@@ -263,6 +264,7 @@ onAuthChange((user, err) => {
 
 function setStore(kind, field, value) {
   store[kind][field] = value;
+  updateNavBadges();
   if (kind === currentKind) {
     syncCurrentKind();
     renderCostumes();
@@ -407,6 +409,7 @@ function formatRegistryTime(date) {
 }
 
 function renderRegistry() {
+  updateNavBadges();
   registryBoxesEl.innerHTML = "";
   for (const [key, label] of Object.entries(INSTANCES)) {
     const registration = latestRegistration[key];
@@ -737,6 +740,7 @@ function renderDmDelayHint() {
 }
 
 function renderCostumes() {
+  updateNavBadges();
   renderExpiryBanner();
   renderDmDelayHint();
   listTitleEl.textContent = `${kindText().title} (${latestCostumes.length}/${itemLimit()})`;
@@ -1052,6 +1056,44 @@ async function handleSectionDrop(e, containerEl, character) {
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+// ---------- Bolinhas vermelhas na barra lateral ----------
+// Quanto tempo a bolinha dos registos fica acesa depois de passarem as 3 horas.
+const REGISTRY_BADGE_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+function setNavBadge(page, count, title) {
+  const item = navEl.querySelector(`.nav-item[data-page="${page}"]`);
+  const badge = item?.querySelector(".nav-badge");
+  if (!badge) return;
+  badge.hidden = count <= 0;
+  badge.textContent = count > 99 ? "99+" : String(count);
+  item.title = count > 0 ? title : "";
+}
+
+// Trajes e pets: conta os que já expiraram ou estão dentro do limite de "Alerta" das configurações.
+function updateNavBadges() {
+  const alertMs = latestUserSettings.alertThresholdDays * ONE_DAY_MS;
+  const countUrgent = (items) =>
+    items.filter((item) => {
+      const remaining = computeRemaining(item.endAt);
+      return remaining.expired || remaining.totalMs <= alertMs;
+    }).length;
+
+  for (const [kind, page, noun] of [["costume", "costume", "traje"], ["pet", "pet", "pet"]]) {
+    const count = countUrgent(store[kind].items);
+    setNavBadge(page, count, `${count} ${noun}${count === 1 ? "" : "s"} a expirar ou já expirado${count === 1 ? "" : "s"}`);
+  }
+
+  // Registos: instâncias em que já passaram as 3 horas do registo, mas só durante
+  // um tempo (REGISTRY_BADGE_WINDOW_MS) — depois a bolinha desaparece.
+  const now = Date.now();
+  const readyRegistrations = Object.values(latestRegistration).filter((reg) => {
+    if (!reg) return false;
+    const readyAt = reg.at.getTime() + REGISTRATION_COOLDOWN_MS;
+    return now >= readyAt && now < readyAt + REGISTRY_BADGE_WINDOW_MS;
+  }).length;
+  setNavBadge("registos", readyRegistrations, `${readyRegistrations} registo${readyRegistrations === 1 ? "" : "s"} já pode${readyRegistrations === 1 ? "" : "m"} ser feito${readyRegistrations === 1 ? "" : "s"}`);
+}
 
 function renderExpiryBanner() {
   const alertDays = latestUserSettings.alertThresholdDays;
